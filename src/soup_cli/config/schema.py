@@ -5119,10 +5119,10 @@ UNSLOTH_SETUP_TASKS: frozenset[str] = frozenset({
 
 
 def _unsloth_flag_clause(training: "TrainingConfig") -> str:
-    """The part of "Use backend: transformers" that a refused unsloth backend adds
-    when ``unsloth_bnb_4bit`` is set: without it, the switched config meets a second
-    refusal (that flag requires unsloth). Shared by #1357's refusal and by #795's,
-    which names the backend fix when it fires first."""
+    """The part of "Use backend: transformers" that a refused backend adds when
+    ``unsloth_bnb_4bit`` is set: without it, the switched config meets a second
+    refusal (that flag requires unsloth). Shared by #1357's refusal and by
+    :func:`_refused_backend_clause`, which #795's names when it fires first."""
     if training.unsloth_bnb_4bit:
         return " and remove training.unsloth_bnb_4bit, which only unsloth reads"
     return ""
@@ -5133,6 +5133,27 @@ def _unsloth_flag_clause(training: "TrainingConfig") -> str:
 #: Validators that defer to :meth:`SoupConfig._validate_mlx_task_support` read
 #: this, not ``"sft"``.
 MLX_TASKS: frozenset[str] = frozenset({"sft", "dpo", "orpo", "simpo", "kto"})
+
+
+def _refused_backend_clause(backend: str, task: str, training: "TrainingConfig") -> str:
+    """The backend's fix, for a refusal that fires before the backend's own.
+
+    ``backend: unsloth`` on a task with no unsloth setup is refused by
+    ``_validate_unsloth_has_a_setup`` (#1357), and ``backend: mlx`` on a task with
+    no MLX trainer by ``_validate_mlx_task_support``; both run after #795's
+    quantization refusal. That refusal names this sentence too, so the config
+    edited the way it says loads, instead of meeting the second refusal. Empty
+    when the backend has a trainer for the task."""
+    if backend == "unsloth" and task not in UNSLOTH_SETUP_TASKS:
+        reason = (
+            f"backend='unsloth' is not applied by task={task!r}: that trainer has "
+            "no unsloth setup."
+        )
+    elif backend == "mlx" and task not in MLX_TASKS:
+        reason = f"task={task!r} has no trainer on backend='mlx'."
+    else:
+        return ""
+    return f"Also, {reason} Use backend: transformers{_unsloth_flag_clause(training)}."
 
 #: #1497 — the tasks whose trainer reads ``training.freeze_layers`` /
 #: ``training.freeze_ratio``: ``SFTTrainerWrapper._setup_transformers``, which
@@ -5341,9 +5362,10 @@ class SoupConfig(BaseModel):
         so for one release it loaded with a warning and resolved to ``none``
         instead; the release that refuses it is named in ``config/deprecation.py``,
         and under ``DEPRECATED_VALUE_SEVERITY = "warn"`` that behaviour returns.
-        On ``backend: unsloth`` the refusal also names the backend's fix, which
-        ``_validate_unsloth_has_a_setup`` (#1357) would otherwise give only after
-        this one, so a config fixed once loads.
+        On ``backend: unsloth`` or ``backend: mlx`` without a trainer for the task,
+        the refusal also names the backend's fix, after its deadline clause, which
+        ``_validate_unsloth_has_a_setup`` (#1357) or ``_validate_mlx_task_support``
+        would otherwise give only after this one, so a config fixed once loads.
         A quant-menu value (``gptq``, ``awq``, ...) was never a default Soup wrote,
         so it was refused from the start.
 
@@ -5377,15 +5399,6 @@ class SoupConfig(BaseModel):
                     )
                 else:
                     fix = "Delete the line or set quantization: none."
-                if self.backend == "unsloth" and self.task not in UNSLOTH_SETUP_TASKS:
-                    # _validate_unsloth_has_a_setup (#1357) refuses this backend too,
-                    # but runs last; name its fix here, so this one refusal is the
-                    # whole way out rather than the first of two.
-                    fix += (
-                        f" Also, backend='unsloth' is not applied by task={self.task!r}: "
-                        "that trainer has no unsloth setup. Use backend: transformers"
-                        f"{_unsloth_flag_clause(tcfg)}."
-                    )
                 warn_deprecated_value(
                     f"training.quantization: {tcfg.quantization} has no effect on "
                     f"task={self.task!r} and is ignored: its trainer never quantises "
@@ -5396,6 +5409,11 @@ class SoupConfig(BaseModel):
                         f"task={self.task!r}: its trainer never quantises the base, so "
                         f"no run can honour it. {fix}"
                     ),
+                    # A backend that has no trainer for this task is refused later
+                    # (#1357, the MLX task check), and not newly in v0.77: name its
+                    # fix after the deadline, so this one refusal is the whole way
+                    # out rather than the first of two.
+                    after_deadline=_refused_backend_clause(self.backend, self.task, tcfg),
                 )
                 tcfg.quantization = "none"
                 return self

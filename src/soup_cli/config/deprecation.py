@@ -63,7 +63,9 @@ def deadline_clause() -> str:
     return f"Soup v{DEPRECATED_VALUE_REJECTION_VERSION} will refuse it."
 
 
-def warn_deprecated_value(message: str, *, refusal: "str | None" = None) -> None:
+def warn_deprecated_value(
+    message: str, *, refusal: "str | None" = None, after_deadline: str = ""
+) -> None:
     """Refuse the value ``message`` describes, or, under ``"warn"``, warn about it.
 
     Under ``"warn"`` this warns with ``message``. Under ``"error"`` it raises
@@ -71,10 +73,16 @@ def warn_deprecated_value(message: str, *, refusal: "str | None" = None) -> None
     given: pass one whenever ``message`` says the value "is ignored", which is
     no longer true once it is refused. Either text should end with what the
     user does instead; the deadline clause is appended to both.
+
+    ``after_deadline`` is the fix for another, older refusal of the same config
+    that runs later: the refusal names it after the deadline clause, which
+    belongs to this value alone, so that one edit loads. A warning does not
+    carry it, since that later refusal still runs and names its own fix.
     """
     if refuses_deprecated_values():
         text = message if refusal is None else refusal
-        raise ValueError(f"{text} {deadline_clause()}")
+        tail = f" {after_deadline}" if after_deadline else ""
+        raise ValueError(f"{text} {deadline_clause()}{tail}")
     warnings.warn(
         f"{message} {deadline_clause()}", SoupConfigDeprecationWarning, stacklevel=3
     )

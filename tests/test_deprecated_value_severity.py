@@ -118,6 +118,22 @@ class TestTheSwitch:
             deprecation.warn_deprecated_value("x: y is ignored.", refusal="x: y is refused.")
         assert str(record[0].message) == f"x: y is ignored. {WILL_REFUSE}"
 
+    def test_another_refusals_fix_follows_the_deadline(self, refuse):
+        """The deadline belongs to the deprecated value; an older refusal's fix that
+        the same message names comes after it, not inside it (#795 with #1357)."""
+        with pytest.raises(ValueError) as excinfo:
+            deprecation.warn_deprecated_value(
+                "x: y is ignored.", refusal="x: y is refused.", after_deadline="Also, z."
+            )
+        assert str(excinfo.value) == f"x: y is refused. {REFUSED} Also, z."
+
+    def test_a_warning_does_not_carry_the_other_refusals_fix(self, warn):
+        with pytest.warns(SoupConfigDeprecationWarning) as record:
+            deprecation.warn_deprecated_value(
+                "x: y is ignored.", refusal="x: y is refused.", after_deadline="Also, z."
+            )
+        assert str(record[0].message) == f"x: y is ignored. {WILL_REFUSE}"
+
 
 # ---------------------------------------------------------------------------
 # data.remove_unused_columns: true (#759)

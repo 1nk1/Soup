@@ -224,13 +224,16 @@ class TestAsOfV077:
     def test_the_first_refusal_names_both_fixes(self, task):
         message = _refusal(_yaml(task, "unsloth", quantization="4bit", unsloth_bnb_4bit=True))
 
+        # The deadline belongs to the quantization refusal, which is new in v0.77; the
+        # backend refusal (#1357) is not, so its fix follows the deadline.
         assert message == (
             f": Value error, training.quantization: 4bit has no effect on task={task!r}: "
             "its trainer never quantises the base, so no run can honour it. Delete the "
-            f"line or set quantization: none. Also, backend='unsloth' is not applied by "
-            f"task={task!r}: that trainer has no unsloth setup. Use backend: transformers "
-            "and remove training.unsloth_bnb_4bit, which only unsloth reads. "
-            f"Refused as of Soup v{DEPRECATED_VALUE_REJECTION_VERSION}."
+            "line or set quantization: none. "
+            f"Refused as of Soup v{DEPRECATED_VALUE_REJECTION_VERSION}. "
+            f"Also, backend='unsloth' is not applied by task={task!r}: that trainer has "
+            "no unsloth setup. Use backend: transformers and remove "
+            "training.unsloth_bnb_4bit, which only unsloth reads."
         )
 
     @pytest.mark.parametrize("task", _UNQUANTISED_WITHOUT_UNSLOTH)
@@ -263,6 +266,51 @@ class TestAsOfV077:
         assert f"backend='unsloth' is not applied by task={task!r}" in message, message
         cfg = load_config_from_string(yaml.safe_dump(_apply_the_named_fixes(raw, message)))
         assert cfg.backend == "transformers"
+
+
+#: Every task that never quantises the base: none of them has a trainer on MLX.
+_UNQUANTISED_WITHOUT_MLX = (*_ALSO_UNQUANTISED, "distill", "asr")
+
+
+class TestOnMlxTheFirstRefusalIsTheWholeWayOut:
+    """``backend: mlx`` on a task MLX has no trainer for, with an explicit 4bit / 8bit:
+    the #795 refusal fires first, and before this named only the quantization fix;
+    the config edited that way was then refused for its backend. It names both now."""
+
+    def test_the_first_refusal_names_both_fixes(self):
+        message = _refusal(_yaml("prm", "mlx", quantization="4bit"))
+
+        assert message == (
+            ": Value error, training.quantization: 4bit has no effect on task='prm': "
+            "its trainer never quantises the base, so no run can honour it. Delete the "
+            "line or set quantization: none. "
+            f"Refused as of Soup v{DEPRECATED_VALUE_REJECTION_VERSION}. "
+            "Also, task='prm' has no trainer on backend='mlx'. Use backend: transformers."
+        )
+
+    @pytest.mark.parametrize("task", _UNQUANTISED_WITHOUT_MLX)
+    @pytest.mark.parametrize(
+        "training", _QUANTISED, ids=lambda t: ",".join(f"{k}={v}" for k, v in t.items())
+    )
+    def test_applying_exactly_the_named_fixes_loads(self, task, training):
+        raw = _raw(task, "mlx", **training)
+        message = _refusal(yaml.safe_dump(raw))
+        assert "Use backend: transformers" in message, message
+
+        cfg = load_config_from_string(yaml.safe_dump(_apply_the_named_fixes(raw, message)))
+
+        assert cfg.backend == "transformers"
+        assert cfg.training.quantization == "none"
+
+    @pytest.mark.parametrize("task", ["sft", "dpo", "orpo"])
+    def test_a_task_with_an_mlx_trainer_gets_no_backend_clause(self, task):
+        """Control: these quantise, so #795 never refuses them; the clause itself is
+        only for a task MLX has no trainer for."""
+        from soup_cli.config.schema import _refused_backend_clause
+
+        cfg = load_config_from_string(_yaml(task, "mlx"))
+
+        assert _refused_backend_clause(cfg.backend, cfg.task, cfg.training) == ""
 
 
 class TestTheStepAsideStaysNarrow:
