@@ -114,9 +114,10 @@ def _refuse(message: str) -> None:
 def _print_refusal_lines(message: str) -> None:
     """Print a multi-line refusal under ``Config validation error:``, indenting
     every line, not only the first (one line per unknown key or staged field).
-    The text quotes key names from the file, so each line is made terminal-safe."""
+    The text quotes key names from the file, so each line is made terminal-safe,
+    and printed with emoji codes off, so a key ``:warning:`` shows as written."""
     for line in message.splitlines():
-        console.print(f"  [red]{for_terminal(line)}[/]")
+        console.print(f"  [red]{for_terminal(line)}[/]", emoji=False)
 
 
 def _clip(detail: str) -> str:
@@ -250,7 +251,9 @@ def load_config(
         for err in e.errors():
             loc = " -> ".join(str(part) for part in err["loc"])
             # Both can quote config keys or values from the file.
-            console.print(f"  [red]{for_terminal(loc)}:[/] {for_terminal(err['msg'])}")
+            console.print(
+                f"  [red]{for_terminal(loc)}:[/] {for_terminal(err['msg'])}", emoji=False
+            )
         raise SystemExit(1)
 
     staged_error = _report_staged_fields(raw, config=config)
