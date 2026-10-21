@@ -981,6 +981,45 @@ class TestTheLoaderIsActuallyWiredUp:
         with pytest.raises(SystemExit):
             loader.load_config(path)
 
+    def test_the_file_refusal_indents_every_line(self, monkeypatch, tmp_path) -> None:
+        """One line per unknown key, each under the header's indent -- the defect the
+        staged-field refusal had (only the first line indented), checked as rendered."""
+        import io
+
+        from rich.console import Console
+
+        from soup_cli.config import loader
+
+        monkeypatch.setattr(loader, "UNKNOWN_KEY_SEVERITY", "error")
+        buffer = io.StringIO()
+        monkeypatch.setattr(
+            loader,
+            "console",
+            Console(file=buffer, width=500, force_terminal=False, color_system=None),
+        )
+        path = tmp_path / "soup.yaml"
+        path.write_text(
+            "base: test-model\n"
+            "data:\n"
+            "  train: ./data.jsonl\n"
+            "  formatt: alpaca\n"
+            "training:\n"
+            "  epochs: 1\n"
+            "  quantizaton: none\n"
+            "  zzqqxx_unrelated: 1\n",
+            encoding="utf-8",
+        )
+        with pytest.raises(SystemExit) as excinfo:
+            loader.load_config(path)
+        assert excinfo.value.code == 1
+        lines = buffer.getvalue().splitlines()
+        assert lines[:2] == ["Config validation error:", ""], lines
+        body = lines[2:]
+        assert len(body) == 3, lines
+        assert all(line.startswith("  unknown config key '") for line in body), lines
+        for key in ("data.formatt", "training.quantizaton", "training.zzqqxx_unrelated"):
+            assert sum(f"'{key}'" in line for line in body) == 1, (key, lines)
+
     def test_a_clean_config_still_loads_under_error_severity(self, monkeypatch) -> None:
         """The control for the flip: refusing everything would pass the two above."""
         from soup_cli.config import loader

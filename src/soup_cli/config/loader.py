@@ -111,6 +111,14 @@ def _refuse(message: str) -> None:
     raise SystemExit(1)
 
 
+def _print_refusal_lines(message: str) -> None:
+    """Print a multi-line refusal under ``Config validation error:``, indenting
+    every line, not only the first (one line per unknown key or staged field).
+    The text quotes key names from the file, so each line is made terminal-safe."""
+    for line in message.splitlines():
+        console.print(f"  [red]{for_terminal(line)}[/]")
+
+
 def _clip(detail: str) -> str:
     """``detail`` on one line, cut to ``_MAX_DETAIL_CHARS`` with an ellipsis."""
     detail = " ".join(detail.split())
@@ -232,7 +240,7 @@ def load_config(
     unknown_error = _report_unknown_keys(raw)
     if unknown_error is not None:
         console.print("[red bold]Config validation error:[/]\n")
-        console.print(f"  [red]{for_terminal(unknown_error)}[/]")
+        _print_refusal_lines(unknown_error)
         raise SystemExit(1)
 
     try:
@@ -248,9 +256,7 @@ def load_config(
     staged_error = _report_staged_fields(raw, config=config)
     if staged_error is not None:
         console.print("[red bold]Config validation error:[/]\n")
-        # One line per staged field: indent each, not only the first.
-        for line in staged_error.splitlines():
-            console.print(f"  [red]{for_terminal(line)}[/]")
+        _print_refusal_lines(staged_error)
         raise SystemExit(1)
 
     return config

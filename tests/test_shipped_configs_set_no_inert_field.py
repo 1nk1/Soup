@@ -18,7 +18,7 @@ from unittest import mock
 import pytest
 import yaml
 
-from soup_cli.config import deprecation
+from soup_cli.config import deprecation, loader
 from soup_cli.config.deprecation import (
     DEPRECATED_VALUE_REJECTION_VERSION,
     SoupConfigDeprecationWarning,
@@ -146,23 +146,33 @@ class TestTheCheckCanFail:
         text = self._BASE + "training:\n  warmup_auto: true\n"
         assert "training.warmup_auto (read by nothing)" in inert_fields_set(text)
 
-    def test_a_staged_field_is_named(self):
+    # Each detector is pinned under both settings of the switch it describes, set
+    # here, so the test does not depend on the release's constant: the item is named
+    # either way, and the load refusal is recorded only under "error".
+
+    @pytest.mark.parametrize("severity", ["warn", "error"])
+    def test_a_staged_field_is_named(self, monkeypatch, severity):
+        monkeypatch.setattr(loader, "STAGED_FIELD_SEVERITY", severity)
         text = self._BASE + "training:\n  forgetting_stop: true\n"
         found = inert_fields_set(text)
         assert "training.forgetting_stop (staged)" in found, found
-        assert (
+        refusal = (
             "refused at load: training.forgetting_stop is accepted but read by nothing; "
             f"refused as of v{STAGED_FIELD_REJECTION_VERSION}. Delete the line."
-        ) in found, found
+        )
+        assert (refusal in found) is (severity == "error"), found
 
-    def test_a_deprecated_value_is_named(self):
+    @pytest.mark.parametrize("severity", ["warn", "error"])
+    def test_a_deprecated_value_is_named(self, monkeypatch, severity):
+        monkeypatch.setattr(deprecation, "DEPRECATED_VALUE_SEVERITY", severity)
         text = self._BASE.replace("  train: d.jsonl\n",
                                   "  train: d.jsonl\n  remove_unused_columns: true\n")
         found = inert_fields_set(text)
         assert any(item.startswith("deprecated value:") for item in found), found
-        assert (
+        refusal = (
             "refused at load: data -> remove_unused_columns: Value error, "
             "data.remove_unused_columns: true never had an effect (no trainer reads it; "
             "the trainers that set it pass false). Delete the line. "
             f"Refused as of Soup v{DEPRECATED_VALUE_REJECTION_VERSION}."
-        ) in found, found
+        )
+        assert (refusal in found) is (severity == "error"), found

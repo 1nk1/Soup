@@ -168,8 +168,11 @@ class TestTheDeadline:
         and a conscious edit of this test, not a quiet change of the constant."""
         assert DEPRECATED_VALUE_REJECTION_VERSION == "0.77"
 
-    def test_deadline_clause_is_exact(self):
-        """The sentence every refusal ends with is built from the constant, word for word."""
+    def test_deadline_clause_is_exact(self, monkeypatch):
+        """The sentence every refusal ends with is built from the constant, word for word.
+        Pinned under the severity it describes, so it does not depend on the release's
+        switch (``TestTheDeadline``'s first test pins that)."""
+        monkeypatch.setattr(deprecation, "DEPRECATED_VALUE_SEVERITY", "error")
         assert deprecation.deadline_clause() == (
             f"Refused as of Soup v{DEPRECATED_VALUE_REJECTION_VERSION}."
         )
