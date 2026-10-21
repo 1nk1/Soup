@@ -1260,7 +1260,11 @@ class TrainingConfig(BaseModel):
             "aqlm (extreme 2-bit), eetq (8-bit fast), "
             "mxfp4 (MXFP4 pre-quantized base, dequantized on load), "
             "fp8 (load FP8 checkpoint with dequantize-on-load), "
-            "bitnet_1.58 (reserved until BitNet trainer routing is available)."
+            "bitnet_1.58 (reserved until BitNet trainer routing is available). "
+            "A task whose trainer never quantises the base (distill, classifier, "
+            "reranker, cross_encoder, prm, moe_lora_routing, unlearn, asr) resolves "
+            "an unset value to none, and an explicit value other than none, 4bit "
+            "and 8bit included, is refused at load (#795)."
         ),
     )
     gptq_disable_exllama: bool = Field(
@@ -1366,7 +1370,9 @@ class TrainingConfig(BaseModel):
         description=(
             "Friendly alias for quantization='8bit' / 'none'. When True, "
             "rewrites quantization to '8bit' if currently 'none'/'4bit'. "
-            "Conflicts with load_in_16bit. (v0.41.0)"
+            "Conflicts with load_in_16bit. On a task whose trainer never "
+            "quantises the base (see quantization), true is refused at load "
+            "(#795). (v0.41.0)"
         ),
     )
     load_in_16bit: Optional[bool] = Field(

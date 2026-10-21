@@ -246,6 +246,44 @@ class TestAnExplicitValueIsRefused:
         assert cfg.training.quantization == "none"
 
 
+class TestTheFieldDescriptionsSayIt:
+    """``docs/config-reference.md`` is rendered from these descriptions, so they say
+    where an explicit value is refused, and name the tasks from the resolver's set."""
+
+    @staticmethod
+    def _description(name: str) -> str:
+        from soup_cli.config.schema import TrainingConfig
+
+        return " ".join(TrainingConfig.model_fields[name].description.split())
+
+    def test_quantization_says_an_explicit_value_is_refused(self):
+        text = self._description("quantization")
+
+        assert (
+            "and an explicit value other than none, 4bit and 8bit included, is refused "
+            "at load (#795)."
+        ) in text, text
+
+    def test_quantization_names_exactly_the_tasks_that_never_quantise(self):
+        import re
+
+        from soup_cli.config.schema import _QUANTIZATION_UNHONOURED_TASKS
+
+        text = self._description("quantization")
+        named = re.search(r"never quantises the base \(([^)]*)\)", text)
+
+        assert named is not None, text
+        assert sorted(named.group(1).split(", ")) == sorted(_QUANTIZATION_UNHONOURED_TASKS)
+
+    def test_load_in_8bit_says_true_is_refused_there(self):
+        text = self._description("load_in_8bit")
+
+        assert (
+            "On a task whose trainer never quantises the base (see quantization), "
+            "true is refused at load (#795)."
+        ) in text, text
+
+
 class TestTheResolverRunsFirst:
     def test_it_is_the_first_after_validator(self):
         """Every later SoupConfig validator that reads ``quantization`` must see the
