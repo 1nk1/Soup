@@ -437,7 +437,8 @@ class TestGroupBTunablesIntegration:
         loader.load_config_from_string(yaml_defaults)
         assert "read by nothing" not in _plain(capsys.readouterr().out)
 
-_LATE_STAGED_RL_FLAGS = ["rl_checkpoint_include_ref_model", "rl_checkpoint_include_rollout_buffer"]
+
+_LATE_STAGED_RL_FLAGS =["rl_checkpoint_include_ref_model", "rl_checkpoint_include_rollout_buffer"]
 
 
 def _valid_with_training(**kwargs) -> str:
