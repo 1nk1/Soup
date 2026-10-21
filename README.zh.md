@@ -91,49 +91,42 @@ NF4 达到 **952 MHz 下 119.6 tok/s，峰值 3.32 GB**（修复前）——与�
 
 ## 最新动态
 
-**v0.76.0——Soup 接受却从未应用的设置，现在会直接中止加载。**
-那些经过校验、写进文档，却没有被它们声称要配置的路径上的任何代码读取的选项，现在会在加载时被拒绝，
-并指出设置名以及该怎么改；其余的会发出警告，并指明将拒绝它们的版本。以前能加载的配置现在可能
-无法加载：请先运行 `soup doctor --config soup.yaml`。
+**v0.77.0——v0.76 警告过的内容，现在会被拒绝。** 31 个没有任何代码读取的配置字段，以及三个已弃用的
+取值，不再带着警告加载：加载会中止，每个设置一行，指出它的名字并说明该删除什么。在 v0.76 上带警告
+加载的配置，在 v0.77 上可能无法加载：请先运行 `soup doctor --config soup.yaml`。
 
-- **破坏性变更：从未生效的设置在加载时被拒绝。** 其中包括
-  `training.quantization_aware: true`（它从未真正运行过量化感知训练）、`training.use_longlora`、
-  `training.ebft_variant`、`training.gdpo_variant`、没有任何初始化流程读取它时的
-  `training.rope_scaling_type`、`freeze_layers` / `freeze_ratio`（transformers 后端上
-  文本 `sft` / `tts` 路径之外）、`auto_mixed_precision`（`sft` / `tts` 之外），以及另外七个
-  没有 unsloth 初始化流程的任务上的 `backend: unsloth`。每条报错都会指出字段名以及该怎么改。
-  `lr_groups`、`early_stop_patience`、`forgetting_eval_steps` 及其他无人读取的配置项，现在加载时发出警告，
-  从 v0.77 起被拒绝。
-- **验证集损失现在会被评估。** `data.val_split` 在每次运行中都会把部分行留作验证、排除在训练之外，
-  但 transformers 后端上没有任何训练器去评估它们。现在，每个拿到划分的任务都会在每个 epoch 结束时评估，或通过
-  `training.eval_steps` 每 N 步评估一次，并记录验证集损失；运行时间会增加百分之几。
-  **对 `grpo`、`ppo` 和 `online_dpo` 是破坏性变更：** 默认不再把行留作验证（`data.val_split`
-  会被忽略并给出提示），因此每一行都参与训练。
-- **破坏性变更：每个非标准的 `grpo_variant` 都会应用 `grpo_beta` KL 惩罚。** `gspo`、`dapo`、
-  `dr_grpo`、`bnpo`、`two_sided` 和 `rft` 以前会校验 `grpo_beta` 然后把它丢掉，因此已有的 variant
-  配置无法复现此前的运行结果。`grpo_beta: 0` 现在无 KL 运行，并跳过参考模型的前向传播。
-- **Layer streaming 在后台线程中通过直接 I/O 读取其磁盘存储层，并且可以跨 NVMe 驱动器做条带化。**
-  在一个比内存还大的 36 GB、70B 形态的 NF4 存储上（一台 RTX 5070 Laptop 8 GB 机器），冷启动的一步
-  从同步读取的 110.5 s 降到 16.2-17.3 s，而借助 `SOUP_LAYER_STREAM_STRIPE_DIRS` 跨两块驱动器后，
-  从 17.4 s 降到 9.97 s（持续负载探测：两轮，1.28x 和 1.41x，没有正式判定；
-  [记录](benchmarks/probe-rtx5070-two-drive-sustained.md)）。能装进内存的存储在内存层上仍然更快，
-  `stream_source: auto` 会选择它。需显式开启（`stream_layers: true`），仍是 BETA；
-  记录：[直接 I/O](benchmarks/gate-974-disk-tier-direct-io.md)、
-  [条带化](benchmarks/gate-two-drive-striping.md)。
-- **新命令和新选项。** `soup adapters check` 扫描 LoRA adapter 是否存在静默失效；
-  `soup bench train` 训练固定步数，若模型没有在训练则以退出码 1 退出
-  （它覆盖 transformers 后端上的 `task: sft`；`soup bench` 现在是一个命令组，`soup bench infer`
-  就是原来的推理基准测试）；`soup data clean` 清洗并修复数据集，且不会改动输入文件；
-  `soup recipes verify` 在 meta 设备上检查（不下载任何权重）每个随附配方都能挂载 LoRA adapter；
-  `soup rewind` 指出造成 loss 尖峰的数据集行。`soup infer` 新增需显式开启的 `--batch-size` 和实验性的
-  `--cuda-graphs`（需要 PyTorch 2.14 或更新版本；在一台 RTX 5070 Laptop 上，未绑定 CPU 核心，
-  Qwen2.5-1.5B 以 FP16 运行，开启后最慢的一次运行，其解码速度也比未开启时最快的一次快 2.9x）。
-  `soup ab` 运行双侧、对方差稳健的检验，`soup adapters sign --backend sigstore` 和
-  `soup attest emit --sign sigstore` 使用 Sigstore 免密钥 OIDC 签名
-  （`pip install "soup-cli[sigstore]"`）。
-
-> 仅支持 Python **3.11–3.13**。在 3.14+ 上，pip 过去会解析到未测试过的 PyTorch
-> wheel，在 Soup 运行之前就崩在原生扩展里。
+- **破坏性变更：暂存（staged）字段和已弃用的取值会被拒绝。** 其中的字段包括 `training.lr_groups`、
+  `early_stop_patience`、`forgetting_eval_steps`、`checkpoint_eval_*`、`quantize_ref_model`、
+  `long_context_grpo` 和 `vision_grpo`，以及 `data.split_thinking` 和 `data.video_*` 系列键。其中
+  `training.rl_checkpoint_include_ref_model` 和 `rl_checkpoint_include_rollout_buffer` 这两个是在
+  v0.76.0 之后才被暂存的，因此此前没有任何版本对它们发出过警告。取值包括：
+  `data.remove_unused_columns: true`、在从不量化的任务上设置 `training.quantization: 4bit` /
+  `8bit`（或 `load_in_8bit: true`），以及 `soup ab --beta`，它现在以退出码 2 退出。
+- **破坏性变更：Python 3.11–3.13。** 不再支持 Python 3.10（已于 2026-10-01 结束生命周期），
+  3.13 已在 CI 中测试。在 3.10 上，pip 会继续解析到 v0.76.x；要升级，请换到 3.11、3.12 或 3.13 的环境。
+  <!-- CONDITIONAL #1951 -->
+- **破坏性变更：移除 AWQ 和 GPTQ 导出。** 在弃用一个版本之后移除：两个上游项目都已归档。
+  `soup export --format awq` / `--format gptq` 和 `soup quantize --to awq` / `--to gptq` 现在会失败；
+  请改用 `gguf`、`onnx`、`tensorrt`、`bitnet` 或 `tq1_0`。
+  <!-- /CONDITIONAL #1951 -->
+- **DPO 和 ORPO 在 Apple Silicon 上原生运行。** 使用 `backend: mlx` 的 `task: dpo` 和 `task: orpo`
+  通过 Soup 自己的 MLX 训练循环训练（DPO 用 TRL 的 sigmoid 损失和 `dpo_beta`；ORPO 用 TRL 的 ORPO
+  目标和 `orpo_beta`，不需要参考模型）。MLX 文本 SFT 新增原生 DoRA（`lora.use_dora: true`）和
+  `training.eval_steps`。`lora.use_rslora` 现在会在 MLX 和 Unsloth 上生效，因此那里的 rsLoRA 运行会按
+  它所要求的缩放训练，结果也会随之改变。
+- **Layer streaming 支持 DeepSeek-V3。** `model_type: deepseek_v3` 可以流式加载，常驻与流式在前向和
+  反向上结果一致；FP8 分块量化的 checkpoint（DeepSeek-V3 发布时所用的格式）会在分片时反量化；
+  `training.stream_expert_layout: per_expert` 一次只流式加载一个被路由到的专家。在一台 RTX 5070
+  Laptop 8 GB 上，Moonlight-16B LoRA 的 GPU 显存峰值为 1.0 GB，而 fused 布局为 3.1 GB，每步耗时约为
+  2.7x（[记录](benchmarks/probe-rtx5070-moonlight-16b.md)）。`training.stream_loss_chunk` 按 token
+  分块运行输出头和损失（`sft`；尚未在 GPU 上测量）。需显式开启（`stream_layers: true`），仍是 BETA。
+- **可核验的来源（provenance）。** `soup registry push --data <file>` 记录训练文件的 SHA-256，
+  `--idempotency-key` 让推送可以安全重试；在 transformers 后端上，运行会记录它所加载基座模型的 Hub
+  commit；`soup ship --require-provenance` 会把证据与它盖章时记录的 adapter、任务和源数据字节、评测
+  套件版本以及判定策略进行比对。
+- **由代码生成的参考页面。** [`docs/config-reference.md`](docs/config-reference.md) 列出每个
+  `soup.yaml` 键及其类型、默认值和取值范围，[`docs/cli-reference.md`](docs/cli-reference.md) 列出每个
+  命令和选项；任一页面不再如实陈述代码的行为时，测试套件就会失败。
 
 更早的更新记录在 [GitHub Releases](https://github.com/MakazhanAlpamys/Soup/releases) 页面。
 
