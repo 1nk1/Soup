@@ -120,6 +120,30 @@ def _print_refusal_lines(message: str) -> None:
         console.print(f"  [red]{for_terminal(line)}[/]", emoji=False)
 
 
+#: What Pydantic puts in front of the text of a ``ValueError`` raised in a validator.
+_PYDANTIC_VALUE_ERROR_PREFIX = "Value error, "
+
+
+def _print_validation_errors(exc: ValidationError) -> None:
+    """Print each entry of a ``ValidationError`` under ``Config validation error:``.
+
+    A field-level entry reads ``<loc>: <message>``. A model-level one (a
+    ``model_validator`` refusal) has an empty ``loc`` and is the message alone,
+    not ``: <message>``. Pydantic's ``Value error, `` prefix is dropped from both:
+    the text after it is Soup's own and already names the fix. Only the terminal
+    is changed; ``load_config_from_string`` keeps Pydantic's text in its
+    ``ValueError``, which API callers read. Both parts can quote config keys or
+    values from the file, so each goes through :func:`for_terminal`.
+    """
+    for err in exc.errors():
+        loc = " -> ".join(str(part) for part in err["loc"])
+        msg = err["msg"].removeprefix(_PYDANTIC_VALUE_ERROR_PREFIX)
+        if loc:
+            console.print(f"  [red]{for_terminal(loc)}:[/] {for_terminal(msg)}", emoji=False)
+        else:
+            console.print(f"  {for_terminal(msg)}", emoji=False)
+
+
 def _clip(detail: str) -> str:
     """``detail`` on one line, cut to ``_MAX_DETAIL_CHARS`` with an ellipsis."""
     detail = " ".join(detail.split())
@@ -248,12 +272,7 @@ def load_config(
         config = _build_config(raw)
     except ValidationError as e:
         console.print("[red bold]Config validation error:[/]\n")
-        for err in e.errors():
-            loc = " -> ".join(str(part) for part in err["loc"])
-            # Both can quote config keys or values from the file.
-            console.print(
-                f"  [red]{for_terminal(loc)}:[/] {for_terminal(err['msg'])}", emoji=False
-            )
+        _print_validation_errors(e)
         raise SystemExit(1)
 
     staged_error = _report_staged_fields(raw, config=config)
