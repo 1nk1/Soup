@@ -10,8 +10,23 @@ import sys
 from types import MappingProxyType, ModuleType
 
 import pytest
+from yaml import safe_load
 
 from soup_cli.config.loader import load_config_from_string
+from soup_cli.config.schema import SoupConfig
+from soup_cli.config.staged_fields import STAGED_FIELD_REJECTION_VERSION
+
+
+def _staged_but_schema_valid(text: str, path: str) -> SoupConfig:
+    """``text`` built through the schema, which still accepts the staged field ``path``,
+    after checking that the loader refuses it (#808, refused as of v0.77)."""
+    with pytest.raises(ValueError) as excinfo:
+        load_config_from_string(text)
+    assert str(excinfo.value) == (
+        f"{path} is accepted but read by nothing; "
+        f"refused as of v{STAGED_FIELD_REJECTION_VERSION}. Delete the line."
+    )
+    return SoupConfig(**safe_load(text))
 
 
 def _tiny_linear_model(with_attention: bool = True):
@@ -704,11 +719,12 @@ class TestLFParity:
         assert cfg.training.llm_int8 is True
 
     def test_quantize_ref_model_happy_dpo(self):
-        cfg = load_config_from_string(
+        cfg = _staged_but_schema_valid(
             "base: a/b\n"
             "task: dpo\n"
             "data: {train: x.jsonl, format: dpo}\n"
-            "training: {quantize_ref_model: true}\n"
+            "training: {quantize_ref_model: true}\n",
+            "training.quantize_ref_model",
         )
         assert cfg.training.quantize_ref_model is True
 
@@ -760,20 +776,22 @@ class TestLFParity:
     def test_quantize_ref_model_happy_grpo(self):
         # Code-review HIGH fix — GRPO has a KL-to-ref policy so
         # quantize_ref_model is meaningful on grpo.
-        cfg = load_config_from_string(
+        cfg = _staged_but_schema_valid(
             "base: a/b\n"
             "task: grpo\n"
             "data: {train: x.jsonl}\n"
-            "training: {quantize_ref_model: true, reward_fn: accuracy}\n"
+            "training: {quantize_ref_model: true, reward_fn: accuracy}\n",
+            "training.quantize_ref_model",
         )
         assert cfg.training.quantize_ref_model is True
 
     def test_quantize_ref_model_happy_kto(self):
-        cfg = load_config_from_string(
+        cfg = _staged_but_schema_valid(
             "base: a/b\n"
             "task: kto\n"
             "data: {train: x.jsonl, format: kto}\n"
-            "training: {quantize_ref_model: true}\n"
+            "training: {quantize_ref_model: true}\n",
+            "training.quantize_ref_model",
         )
         assert cfg.training.quantize_ref_model is True
 

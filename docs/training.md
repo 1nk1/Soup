@@ -386,10 +386,11 @@ master weights (see [Process Reward Model](#process-reward-model-prm)):
 For these tasks an unset `quantization` resolves to `none`, so the stored config and the VRAM
 pre-flight describe the run that actually happens (#795).
 
-An explicit `4bit` or `8bit` (or `load_in_8bit: true`) **loads with a warning and resolves to
-`none`**, because every config Soup dumped while `4bit` was the default carries it literally.
-The warning names the task and the release that will refuse it; set `quantization: none` to
-silence it. A Quant Menu value (`gptq`, `awq`, ...) or a 4-bit-only setting such as
+An explicit `4bit` or `8bit` (or `load_in_8bit: true`) **is refused at config load as of
+v0.77**, naming the task: delete the line or set `quantization: none` (for `load_in_8bit: true`,
+delete that line and any `quantization` line). v0.76 loaded it with a warning and resolved it to
+`none` for one release, because every config Soup dumped while `4bit` was the default carries it
+literally (#795). A Quant Menu value (`gptq`, `awq`, ...) or a 4-bit-only setting such as
 `bnb_4bit_quant_storage` is refused at config load, naming the task. Every other task applies
 the field as documented in [Performance & Quantization](performance-and-quantization.md).
 

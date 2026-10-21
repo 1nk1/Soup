@@ -126,13 +126,31 @@ class TestSoupDoctorReportsIt:
         assert "backend='unsloth' is not applied by task='reward_model'" in out
 
 
+#: The tasks above whose trainer also never quantises the base (#795): as of v0.77 an
+#: explicit ``quantization: 4bit`` there is refused on its own, before the backend.
+_ALSO_UNQUANTISED = tuple(task for task in _NEWLY_REFUSED if task != "reward_model")
+
+
+@pytest.fixture
+def warn(monkeypatch):
+    """The v0.76 setting of the deprecated-value switch, where #795 resolved an
+    explicit ``4bit`` to ``none`` with a warning instead of refusing it."""
+    from soup_cli.config import deprecation
+
+    monkeypatch.setattr(deprecation, "DEPRECATED_VALUE_SEVERITY", "warn")
+
+
 class TestUnslothBnb4bitNamesTheTask:
     """``unsloth_bnb_4bit`` was checked before this refusal, and on six of the seven
     tasks the #795 resolver has already turned ``quantization: 4bit`` into ``none``,
-    so that check blamed a value the user never wrote."""
+    so that check blamed a value the user never wrote.
+
+    That holds under the v0.76 ``"warn"`` setting, kept behind the switch. As of
+    v0.77 the resolver refuses the explicit ``4bit`` on those six tasks instead, so
+    the way out takes two refusals there; see ``TestAsOfV077``."""
 
     @pytest.mark.parametrize("task", _NEWLY_REFUSED)
-    def test_one_refusal_names_the_task_and_the_whole_way_out(self, task):
+    def test_one_refusal_names_the_task_and_the_whole_way_out(self, task, warn):
         message = _refusal(_yaml(task, "unsloth", quantization="4bit", unsloth_bnb_4bit=True))
 
         assert f"backend='unsloth' is not applied by task={task!r}" in message, message
@@ -141,10 +159,51 @@ class TestUnslothBnb4bitNamesTheTask:
         assert "unsloth_bnb_4bit" in message
 
     @pytest.mark.parametrize("task", _NEWLY_REFUSED)
-    def test_following_that_advice_loads(self, task):
+    def test_following_that_advice_loads(self, task, warn):
         cfg = load_config_from_string(_yaml(task, "transformers", quantization="4bit"))
 
         assert cfg.backend == "transformers"
+
+    def test_reward_model_still_takes_one_refusal_as_shipped(self):
+        """reward_model quantises its base, so #795 never refuses its ``4bit``."""
+        message = _refusal(
+            _yaml("reward_model", "unsloth", quantization="4bit", unsloth_bnb_4bit=True)
+        )
+        assert "backend='unsloth' is not applied by task='reward_model'" in message, message
+        assert "unsloth_bnb_4bit" in message
+        assert load_config_from_string(
+            _yaml("reward_model", "transformers", quantization="4bit")
+        ).backend == "transformers"
+
+
+class TestAsOfV077:
+    """v0.77 refuses an explicit ``4bit`` on a task that never quantises (#795), and
+    that validator runs first, so on these six tasks each refusal names one line."""
+
+    @pytest.mark.parametrize("task", _ALSO_UNQUANTISED)
+    def test_the_first_refusal_names_the_quantization_line(self, task):
+        message = _refusal(_yaml(task, "unsloth", quantization="4bit", unsloth_bnb_4bit=True))
+
+        assert (
+            f"training.quantization: 4bit has no effect on task={task!r}: its trainer "
+            "never quantises the base, so no run can honour it. Delete the line or set "
+            "quantization: none."
+        ) in message, message
+
+    @pytest.mark.parametrize("task", _ALSO_UNQUANTISED)
+    def test_the_second_names_the_backend_and_the_flag(self, task):
+        message = _refusal(_yaml(task, "unsloth", unsloth_bnb_4bit=True))
+
+        assert f"backend='unsloth' is not applied by task={task!r}" in message, message
+        assert "Use backend: transformers" in message
+        assert "unsloth_bnb_4bit" in message
+
+    @pytest.mark.parametrize("task", _ALSO_UNQUANTISED)
+    def test_following_both_loads(self, task):
+        cfg = load_config_from_string(_yaml(task, "transformers"))
+
+        assert cfg.backend == "transformers"
+        assert cfg.training.quantization == "none"
 
 
 class TestTheStepAsideStaysNarrow:

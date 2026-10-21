@@ -11,10 +11,11 @@ Because the default is ``4bit``, an UNSET ``quantization`` resolves to ``none`` 
 these tasks so a minimal config still parses and the stored config is truthful.
 
 An explicit bitsandbytes value -- ``4bit``, ``8bit``, or the ``load_in_8bit`` alias --
-loads with a warning and resolves to ``none`` (#1043 review): every config Soup
-dumped on the old default carries ``quantization: 4bit`` literally, and refusing it
-broke files Soup wrote itself. A quant-menu value was never a default, so it is
-still refused.
+loaded with a warning and resolved to ``none`` in v0.76 (#1043 review): every config
+Soup dumped on the old default carries ``quantization: 4bit`` literally, and refusing
+it at once broke files Soup wrote itself. After that release of notice, v0.77 refuses
+it, naming the task and the line to delete. A quant-menu value was never a default,
+so it was always refused.
 """
 
 import io
@@ -22,8 +23,11 @@ import io
 import pytest
 from rich.console import Console
 
-from soup_cli.config import loader
-from soup_cli.config.deprecation import SoupConfigDeprecationWarning
+from soup_cli.config import deprecation, loader
+from soup_cli.config.deprecation import (
+    DEPRECATED_VALUE_REJECTION_VERSION,
+    SoupConfigDeprecationWarning,
+)
 from soup_cli.config.loader import load_config_from_string
 
 _MINIMAL = {
@@ -83,7 +87,65 @@ def printed(monkeypatch):
     return buffer
 
 
+def _refusal(task: str, quant: str, fix: str = "Delete the line or set quantization: none.") -> str:
+    return (
+        f": Value error, training.quantization: {quant} has no effect on task='{task}': "
+        "its trainer never quantises the base, so no run can honour it. "
+        f"{fix} Refused as of Soup v{DEPRECATED_VALUE_REJECTION_VERSION}."
+    )
+
+
+class TestAnExplicitBnbValueIsRefused:
+    """v0.77: the release of notice is over, so an explicit bitsandbytes value on a
+    task that never quantises is refused at load, naming the task and the fix."""
+
+    @pytest.mark.parametrize("task", _UNHONOURED)
+    @pytest.mark.parametrize("quant", ["4bit", "8bit"])
+    def test_bnb_values_are_refused_naming_the_task(self, task, quant, printed):
+        with pytest.raises(ValueError) as excinfo:
+            load_config_from_string(_yaml(task, f"  quantization: {quant}\n"))
+        assert str(excinfo.value) == _refusal(task, quant)
+        assert printed.getvalue() == ""
+
+    @pytest.mark.parametrize("task", ["prm", "unlearn"])
+    def test_the_load_in_8bit_alias_is_refused_naming_the_alias(self, task):
+        with pytest.raises(ValueError) as excinfo:
+            load_config_from_string(_yaml(task, "  load_in_8bit: true\n"))
+        assert str(excinfo.value) == _refusal(
+            task,
+            "8bit",
+            "Delete training.load_in_8bit: true, which sets quantization to 8bit, and "
+            "any training.quantization line.",
+        )
+
+    @pytest.mark.parametrize("task", _UNHONOURED)
+    @pytest.mark.parametrize("exclude_none", [False, True], ids=["full", "exclude_none"])
+    def test_a_config_dumped_on_the_old_default_is_refused(self, task, exclude_none):
+        """What v0.76 loaded with a warning: a dump written while ``4bit`` was the
+        default. Refused now, naming the line, while today's dump reloads."""
+        import yaml
+
+        from soup_cli.config.schema import SoupConfig
+
+        dumped = SoupConfig(**yaml.safe_load(_yaml(task))).model_dump(
+            mode="json", exclude_none=exclude_none
+        )
+        # Control: what Soup dumps today carries the resolved none and reloads.
+        assert load_config_from_string(yaml.safe_dump(dumped, sort_keys=False))
+        dumped["training"]["quantization"] = "4bit"
+        with pytest.raises(ValueError) as excinfo:
+            load_config_from_string(yaml.safe_dump(dumped, sort_keys=False))
+        assert str(excinfo.value) == _refusal(task, "4bit")
+
+
 class TestAnExplicitBnbValueWarnsAndResolves:
+    """The v0.76 behaviour, kept behind ``DEPRECATED_VALUE_SEVERITY = "warn"`` for the
+    next value that needs a release of notice."""
+
+    @pytest.fixture(autouse=True)
+    def _warn(self, monkeypatch):
+        monkeypatch.setattr(deprecation, "DEPRECATED_VALUE_SEVERITY", "warn")
+
     @pytest.mark.parametrize("task", _UNHONOURED)
     @pytest.mark.parametrize("quant", ["4bit", "8bit"])
     def test_bnb_values_name_the_task(self, task, quant, printed):

@@ -382,13 +382,13 @@ KNOWN_UNCONSUMED = {
                             "which nothing in src/ calls; and that line reads "
                             "the decisions dict and WRITES the value into a "
                             "config, so it is not a read of the field either",
-    # -- declared, and an explicit value is IGNORED with a warning naming the
-    #    release that refuses it, so having no consumer is correct. Not refused
-    #    yet, because Soup's own writers put the old default into saved configs.
+    # -- declared, and an explicit `true` is refused at load as of v0.77 (v0.76
+    #    ignored it with a warning, because Soup's own writers had put the old
+    #    default into saved configs), so having no consumer is correct.
     "data.remove_unused_columns": "#759 -- no trainer reads it; the trainers that set the "
                                   "HF argument pass False so a custom collator still sees "
                                   "the extra columns. The default is now False, and an "
-                                  "explicit true loads with a warning and is ignored",
+                                  "explicit true is refused at load as of v0.77",
     # training.packing_cross_doc_attn_mask moved to REFUSED_AT_LOAD (#1814).
     # -- staged for features that have not landed; grouped so they can be
     #    retired together rather than one at a time.

@@ -678,8 +678,9 @@ class DataConfig(BaseModel):
         description=(
             "HF Trainer remove_unused_columns. No trainer reads this field; the "
             "trainers that set it pass False so a custom collator can still see "
-            "the extra columns. An explicit `true` loads with a warning and is "
-            "ignored, and a later release refuses it. (v0.42.0 Part E; #759)"
+            "the extra columns. An explicit `true` is refused at config load "
+            "(it warned for one release first); delete the line. "
+            "(v0.42.0 Part E; #759)"
         ),
     )
     prompt_strategy: Optional[str] = Field(
@@ -1009,15 +1010,17 @@ class DataConfig(BaseModel):
     @field_validator("remove_unused_columns", mode="after")
     @classmethod
     def _ignore_remove_unused_columns_true(cls, value: bool) -> bool:
-        """``true`` never took effect: warn, and load it as ``false`` (#759).
+        """``true`` never took effect: refuse it (#759).
 
         No trainer reads this field; the trainers that set the HF argument pass
         ``False`` so a custom collator still receives the columns the model's
         ``forward()`` does not name. The declared default used to say ``True``,
         so ``soup autopilot`` wrote ``remove_unused_columns: true`` into every
-        config it generated. Refusing that would break files Soup wrote itself,
-        so for one release an explicit ``true`` loads, is ignored, and says so.
-        The release that refuses it is named once, in ``config/deprecation.py``.
+        config it generated. Refusing that at once would have broken files Soup
+        wrote itself, so for one release an explicit ``true`` loaded, was
+        ignored, and said so. The release that refuses it is named once, in
+        ``config/deprecation.py``; under ``DEPRECATED_VALUE_SEVERITY = "warn"``
+        the old behaviour (warn, load ``false``) returns.
         """
         if value:
             from soup_cli.config.deprecation import warn_deprecated_value
@@ -5315,13 +5318,14 @@ class SoupConfig(BaseModel):
         resolved ``none`` and reloads.
 
         An explicit bitsandbytes value (``4bit``, ``8bit``, or ``load_in_8bit:
-        true``, which rewrites the field to ``8bit``) loads with a warning and
-        resolves to ``none``, rather than being refused. Every config Soup dumped
-        while ``4bit`` was the default carries it literally -- stored run configs,
-        ``train --replay`` -- and refusing those would break files Soup wrote
-        itself. The release that refuses it is named in ``config/deprecation.py``.
+        true``, which rewrites the field to ``8bit``) is refused, naming the task
+        and the line to delete. Every config Soup dumped while ``4bit`` was the
+        default carries it literally -- stored run configs, ``train --replay`` --
+        so for one release it loaded with a warning and resolved to ``none``
+        instead; the release that refuses it is named in ``config/deprecation.py``,
+        and under ``DEPRECATED_VALUE_SEVERITY = "warn"`` that behaviour returns.
         A quant-menu value (``gptq``, ``awq``, ...) was never a default Soup wrote,
-        so it is still refused.
+        so it was refused from the start.
 
         Runs before every other ``SoupConfig`` validator so the ones that read
         ``quantization`` see the resolved value. In particular it must stay before

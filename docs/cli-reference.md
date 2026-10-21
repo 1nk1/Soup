@@ -136,7 +136,7 @@ Usage: `soup ab [OPTIONS]`
 | `--input`, `-i` | text |  | yes | JSONL with {arm, &lt;metric>} per row. |
 | `--metric` | text |  | yes | Metric: latency \| judge_score \| retry_rate. |
 | `--alpha` | float | `0.05` |  | Error rate (0, 1) of both verdicts, kept for a test re-run after every new row, at any number of rows: with no difference the test ends in reject_h0, and with a true difference of --effect-size or more in accept_h0, each in at most this share of runs. |
-| `--beta` | float |  |  | Retired (#1418): ignored, with a warning. --alpha now bounds wrong accept_h0 verdicts too. |
+| `--beta` | float |  |  | Retired (#1418): refused with a usage error. --alpha now bounds wrong accept_h0 verdicts too. |
 | `--effect-size` | float | `0.1` |  | Minimum detectable difference in means. |
 | `--slack-url` | text |  |  | Optional Slack webhook URL — POSTed on a reject_h0 / accept_h0 decision (not on continue). SSRF-validated. |
 | `--discord-url` | text |  |  | Optional Discord webhook URL — POSTed on a reject_h0 / accept_h0 decision (not on continue). SSRF-validated. |

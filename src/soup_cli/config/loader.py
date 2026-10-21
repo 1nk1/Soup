@@ -43,12 +43,15 @@ UNKNOWN_KEY_SEVERITY = "error"
 
 #: What to do about a declared config field that is read by nothing (#808).
 #:
-#: The decision was warn-then-forbid. Ships ``"warn"`` with a deadline named
-#: by :data:`~soup_cli.config.staged_fields.STAGED_FIELD_REJECTION_VERSION` -- by
-#: reference, not by number, because the warning stated that version in
-#: exactly one place -- and the release that reaches it flips this to
-#: ``"error"``.
-STAGED_FIELD_SEVERITY = "warn"
+#: The decision was warn-then-forbid. v0.76 shipped ``"warn"`` with a deadline
+#: named by :data:`~soup_cli.config.staged_fields.STAGED_FIELD_REJECTION_VERSION`
+#: -- by reference, not by number, because the warning stated that version in
+#: exactly one place -- and the 0.77.0 release, which reached it, flipped this to
+#: ``"error"`` in the same commit as ``DEPRECATED_VALUE_SEVERITY`` in
+#: ``config/deprecation.py``. ``tests/test_issue808_staged_config_fields.py`` and
+#: ``TestTheDeadline`` in ``tests/test_config_deprecation.py`` pin it to the
+#: declared ``__version__``.
+STAGED_FIELD_SEVERITY = "error"
 
 
 def _report_unknown_keys(raw: dict) -> "str | None":
@@ -159,11 +162,13 @@ def _read_config_file(path: Path, *, raise_unreadable: bool = False) -> object:
 def _build_config(raw: dict) -> SoupConfig:
     """Construct ``SoupConfig``, printing each deprecated value once (#759).
 
-    Validators report a value that will be refused in a later release as a
-    :class:`SoupConfigDeprecationWarning`. Recorded here rather than left to the
-    ``warnings`` filters, which print a source line, may show a message once
-    per process rather than once per load, or hide it entirely. Any other
-    warning raised while building is passed on unchanged.
+    Under ``DEPRECATED_VALUE_SEVERITY = "warn"`` validators report a value that a
+    later release refuses as a :class:`SoupConfigDeprecationWarning`; under
+    ``"error"`` they raise instead, and nothing is printed. A warning is
+    recorded here rather than left to the ``warnings`` filters, which print a
+    source line, may show a message once per process rather than once per load,
+    or hide it entirely. Any other warning raised while building is passed on
+    unchanged.
     """
     try:
         with warnings.catch_warnings(record=True) as caught:

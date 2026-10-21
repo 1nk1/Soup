@@ -844,7 +844,7 @@ training:
 Computes `continue` / `early_stop` / `lower_lr` advice from the loss curve for
 callers that invoke the detector. `convergence_detection` is reported as not
 enforced by `soup train`; setting `convergence_window` or `convergence_rel_tol` away from their
-defaults emits a load-time warning in v0.76 and will be refused as of v0.77 (#808).
+defaults warned at load in v0.76 and is refused at load as of v0.77 (#808).
 
 ### VRAM Pressure Advisory
 
@@ -869,9 +869,10 @@ are not enforced during training in this build. `soup train` prints an advisory 
 when one is set away from its default, directing users to `--gate <suite.yaml>`.
 Their tuning knobs (`forgetting_eval_steps`, `forgetting_benchmark`, `forgetting_stop`,
 `checkpoint_eval_steps`, `checkpoint_eval_metric`, `checkpoint_eval_tasks`, `checkpoint_keep_top`,
-`convergence_window`, and `convergence_rel_tol`) emit a load-time warning in v0.76
-and are refused as of v0.77 per #808, alongside `early_stop_patience` (#761), so each
-is reported once with the refusal date.
+`convergence_window`, and `convergence_rel_tol`) warned at load in v0.76 and are
+refused at load as of v0.77 per #808, alongside `early_stop_patience` (#761): the
+refusal names each one set away from its default, one line per field, and says to
+delete the line.
 
 Use the live eval gate for regression detection and automatic stopping today:
 
