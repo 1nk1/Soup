@@ -436,3 +436,34 @@ class TestGroupBTunablesIntegration:
         )
         loader.load_config_from_string(yaml_defaults)
         assert "read by nothing" not in _plain(capsys.readouterr().out)
+
+_LATE_STAGED_RL_FLAGS = ["rl_checkpoint_include_ref_model", "rl_checkpoint_include_rollout_buffer"]
+
+
+def _valid_with_training(**kwargs) -> str:
+    lines = ["base: hf/model", "task: sft", "data:", "  train: ./t.jsonl", "training:"]
+    lines += [f"  {k}: {v}" for k, v in kwargs.items()]
+    lines.append("output: ./o")
+    return "\n".join(lines) + "\n"
+
+
+class TestTheLateStagedRlCheckpointFlags:
+    """#1980 staged these two after v0.76.0, so no release warned about them before
+    v0.77 refuses them (ruling 2026-10-21, one deadline constant). Only a value that
+    ever claimed something is refused: an explicit ``false``, the default that never
+    made the manifest lie, still loads, silently."""
+
+    @pytest.mark.parametrize("name", _LATE_STAGED_RL_FLAGS)
+    def test_an_explicit_false_loads_silently(self, name: str, capsys) -> None:
+        cfg = loader.load_config_from_string(_valid_with_training(**{name: "false"}))
+        assert getattr(cfg.training, name) is False
+        assert "read by nothing" not in _plain(capsys.readouterr().out)
+
+    @pytest.mark.parametrize("name", _LATE_STAGED_RL_FLAGS)
+    def test_true_is_refused_with_the_one_line_fix(self, name: str) -> None:
+        with pytest.raises(ValueError) as excinfo:
+            loader.load_config_from_string(_valid_with_training(**{name: "true"}))
+        assert (
+            f"training.{name} is accepted but read by nothing; "
+            f"refused as of v{STAGED_FIELD_REJECTION_VERSION}. Delete the line."
+        ) in str(excinfo.value)
