@@ -5410,9 +5410,9 @@ class SoupConfig(BaseModel):
                         f"no run can honour it. {fix}"
                     ),
                     # A backend that has no trainer for this task is refused later
-                    # (#1357, the MLX task check), and not newly in v0.77: name its
-                    # fix after the deadline, so this one refusal is the whole way
-                    # out rather than the first of two.
+                    # (#1357, the MLX task check), and that refusal has no deadline:
+                    # name its fix after this one's deadline clause, so this one
+                    # refusal is the whole way out rather than the first of two.
                     after_deadline=_refused_backend_clause(self.backend, self.task, tcfg),
                 )
                 tcfg.quantization = "none"
