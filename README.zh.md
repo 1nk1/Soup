@@ -104,11 +104,9 @@ NF4 达到 **952 MHz 下 119.6 tok/s，峰值 3.32 GB**（修复前）——与�
   `8bit`（或 `load_in_8bit: true`），以及 `soup ab --beta`，它现在以退出码 2 退出。
 - **破坏性变更：Python 3.11–3.13。** 不再支持 Python 3.10（已于 2026-10-01 结束生命周期），
   3.13 已在 CI 中测试。在 3.10 上，pip 会继续解析到 v0.76.x；要升级，请换到 3.11、3.12 或 3.13 的环境。
-  <!-- CONDITIONAL #1951 -->
 - **破坏性变更：移除 AWQ 和 GPTQ 导出。** 在弃用一个版本之后移除：两个上游项目都已归档。
   `soup export --format awq` / `--format gptq` 和 `soup quantize --to awq` / `--to gptq` 现在会失败；
   请改用 `gguf`、`onnx`、`tensorrt`、`bitnet` 或 `tq1_0`。
-  <!-- /CONDITIONAL #1951 -->
 - **DPO 和 ORPO 在 Apple Silicon 上原生运行。** 使用 `backend: mlx` 的 `task: dpo` 和 `task: orpo`
   通过 Soup 自己的 MLX 训练循环训练（DPO 用 TRL 的 sigmoid 损失和 `dpo_beta`；ORPO 用 TRL 的 ORPO
   目标和 `orpo_beta`，不需要参考模型）。MLX 文本 SFT 新增原生 DoRA（`lora.use_dora: true`）和

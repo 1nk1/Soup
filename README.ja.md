@@ -108,12 +108,10 @@ v0.77 では読み込めなくなることがあります。まず `soup doctor 
 - **破壊的変更: Python 3.11–3.13。** Python 3.10 はサポート対象外になり（2026-10-01 にサポート終了）、
   3.13 が CI でテストされます。3.10 では pip は引き続き v0.76.x を解決します。アップグレードするには、
   3.11、3.12、3.13 のいずれかの環境に移行してください。
-  <!-- CONDITIONAL #1951 -->
 - **破壊的変更: AWQ と GPTQ のエクスポートは削除されました。** 一リリースの非推奨期間を経ての削除で、
   どちらの上流プロジェクトもアーカイブ済みです。`soup export --format awq` / `--format gptq` と
   `soup quantize --to awq` / `--to gptq` は失敗するようになりました。`gguf`、`onnx`、`tensorrt`、
   `bitnet`、`tq1_0` を使ってください。
-  <!-- /CONDITIONAL #1951 -->
 - **DPO と ORPO が Apple Silicon でネイティブに動作します。** `backend: mlx` での `task: dpo` と
   `task: orpo` は、Soup 独自の MLX ループで学習します（`dpo_beta` による TRL の sigmoid 損失、
   `orpo_beta` による TRL の ORPO 目的関数で、参照モデルは不要）。MLX のテキスト SFT は、ネイティブ DoRA

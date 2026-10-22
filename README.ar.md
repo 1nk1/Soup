@@ -107,12 +107,10 @@ soup train
 - **تغيير غير متوافق مع الإصدارات السابقة: Python 3.11–3.13.** لم يعد Python 3.10 مدعومًا (انتهى عمر
   دعمه في 2026-10-01)، وصار 3.13 يُختبَر في CI. وعلى 3.10 يواصل pip اختيار v0.76.x؛ انتقل إلى بيئة
   3.11 أو 3.12 أو 3.13 للترقية.
-  <!-- CONDITIONAL #1951 -->
 - **تغيير غير متوافق مع الإصدارات السابقة: أُزيل التصدير بصيغتي AWQ وGPTQ** بعد إصدار واحد من الإيقاف
   التدريجي: فكلا المشروعين الأصليين مؤرشف. صار `soup export --format awq` /
   <span dir="ltr">`--format gptq`</span> و`soup quantize --to awq` / <span dir="ltr">`--to gptq`</span>
   يفشلان؛ استخدم `gguf` أو `onnx` أو `tensorrt` أو `bitnet` أو `tq1_0`.
-  <!-- /CONDITIONAL #1951 -->
 - **يعمل DPO وORPO أصليًا على Apple Silicon.** يتدرّب `task: dpo` و`task: orpo` مع `backend: mlx` عبر
   حلقة MLX الخاصة بـ Soup (خسارة sigmoid من TRL مع `dpo_beta`؛ وهدف ORPO من TRL مع `orpo_beta`، دون نموذج
   مرجعي). ويكتسب SFT النصي على MLX دعم DoRA الأصلي (`lora.use_dora: true`) و`training.eval_steps`. وصار

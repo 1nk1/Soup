@@ -107,11 +107,9 @@ loading on v0.77: run `soup doctor --config soup.yaml` first.
 - **Breaking: Python 3.11–3.13.** Python 3.10 is no longer supported (end of life 2026-10-01),
   and 3.13 is tested in CI. On 3.10, pip keeps resolving v0.76.x; move to a 3.11, 3.12 or 3.13
   environment to upgrade.
-  <!-- CONDITIONAL #1951 -->
 - **Breaking: AWQ and GPTQ export are removed,** after one release as deprecated: both upstream
   projects are archived. `soup export --format awq` / `--format gptq` and `soup quantize --to awq`
   / `--to gptq` now fail; use `gguf`, `onnx`, `tensorrt`, `bitnet` or `tq1_0`.
-  <!-- /CONDITIONAL #1951 -->
 - **DPO and ORPO run natively on Apple Silicon.** `task: dpo` and `task: orpo` with
   `backend: mlx` train through Soup's own MLX loop (TRL's sigmoid loss with `dpo_beta`; TRL's
   ORPO objective with `orpo_beta`, no reference model). MLX text SFT gains native DoRA

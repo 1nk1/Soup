@@ -109,12 +109,10 @@ yapılandırma v0.77'de yüklenmeyebilir: önce `soup doctor --config soup.yaml`
 - **Geriye dönük uyumsuz değişiklik: Python 3.11–3.13.** Python 3.10 artık desteklenmiyor (destek
   süresi 2026-10-01'de sona erdi) ve 3.13 CI'da test ediliyor. 3.10'da pip v0.76.x'i seçmeye devam
   ediyor; yükseltmek için 3.11, 3.12 veya 3.13 ortamına geçin.
-  <!-- CONDITIONAL #1951 -->
 - **Geriye dönük uyumsuz değişiklik: AWQ ve GPTQ dışa aktarımı kaldırıldı;** bir sürüm boyunca
   kullanımdan kaldırılmış olarak kaldıktan sonra: her iki üst proje de arşivlenmiş durumda.
   `soup export --format awq` / `--format gptq` ve `soup quantize --to awq` / `--to gptq` artık hata
   veriyor; `gguf`, `onnx`, `tensorrt`, `bitnet` veya `tq1_0` kullanın.
-  <!-- /CONDITIONAL #1951 -->
 - **DPO ve ORPO, Apple Silicon üzerinde yerel olarak çalışıyor.** `backend: mlx` ile `task: dpo` ve
   `task: orpo`, Soup'un kendi MLX döngüsüyle eğitiliyor (`dpo_beta` ile TRL'nin sigmoid kaybı; `orpo_beta`
   ile TRL'nin ORPO hedefi, referans model olmadan). MLX metin SFT'si yerel DoRA (`lora.use_dora: true`)
