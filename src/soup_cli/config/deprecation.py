@@ -30,6 +30,16 @@ import warnings
 #: shipped in 0.76, the refusal in 0.77.
 DEPRECATED_VALUE_REJECTION_VERSION = "0.77"
 
+#: The release that removed ``soup export --format awq`` / ``gptq`` (#1710, #1951).
+#:
+#: A fact about the past, not a deadline, so it is not built from
+#: :data:`DEPRECATED_VALUE_REJECTION_VERSION`: that constant moves with the next
+#: deprecation, and the refusal would then date the removal to a release that
+#: still shipped both formats. ``TestTheExportRemovalRelease`` in
+#: ``tests/test_config_deprecation.py`` pins it and checks ``__version__`` has
+#: reached it.
+EXPORT_FORMATS_REMOVED_IN = "0.77.0"
+
 #: What to do about a deprecated config value (#759, #795, #1418).
 #:
 #: ``"warn"``  -- load it, ignore it, and print one line naming the release

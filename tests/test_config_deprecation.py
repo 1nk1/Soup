@@ -219,6 +219,42 @@ class TestTheDeadline:
         )
 
 
+def _release(version: str) -> tuple[int, int, int]:
+    """``"0.77.0"`` as ``(0, 77, 0)``; a version written without a patch reads as ``.0``."""
+    major, minor, patch = re.match(r"(\d+)\.(\d+)(?:\.(\d+))?", version).groups()
+    return int(major), int(minor), int(patch or 0)
+
+
+class TestTheExportRemovalRelease:
+    """``soup export --format awq`` / ``gptq`` name the release that removed them (#1710).
+
+    That release is a fact about the past, so it has its own constant. Built from
+    :data:`DEPRECATED_VALUE_REJECTION_VERSION` it would move with the next deprecation's
+    deadline, and the refusal would date the removal to a release that still shipped
+    both formats."""
+
+    def test_the_release_helper_compares_whole_releases(self):
+        assert _release("0.77.0") == (0, 77, 0)
+        assert _release("0.77") == (0, 77, 0)
+        assert _release("0.76.9") < _release("0.77.0") < _release("0.77.1")
+        assert _release("0.100.0") > _release("0.77.0")
+
+    def test_the_removal_release_is_written_out(self):
+        """The release that shipped the removal (#1951 merged before the v0.77.0 cut).
+        Changing it rewrites history in every refusal: it needs a changelog entry and a
+        conscious edit of this test."""
+        assert deprecation.EXPORT_FORMATS_REMOVED_IN == "0.77.0"
+
+    def test_this_version_is_at_or_past_the_removal_release(self):
+        """Pinned to ``__version__`` as the deadlines above are: a version before the
+        removal release would name, in the refusal, a release that has not shipped."""
+        removed_in = deprecation.EXPORT_FORMATS_REMOVED_IN
+        assert _release(soup_cli.__version__) >= _release(removed_in), (
+            f"soup_cli is {soup_cli.__version__}, before v{removed_in}, the release the "
+            "awq/gptq refusal says removed them"
+        )
+
+
 class TestTheLoader:
     def _fake_config(self, *emits):
         def build(**_raw):
