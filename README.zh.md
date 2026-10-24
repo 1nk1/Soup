@@ -102,29 +102,29 @@ NF4 达到 **952 MHz 下 119.6 tok/s，峰值 3.32 GB**（修复前）——与�
   v0.76.0 之后才被暂存的，因此此前没有任何版本对它们发出过警告。取值包括：
   `data.remove_unused_columns: true`、在从不量化的任务上设置 `training.quantization: 4bit` /
   `8bit`（或 `load_in_8bit: true`），以及 `soup ab --beta`，它现在以退出码 2 退出。
-- **破坏性变更：Python 3.11–3.13。** 不再支持 Python 3.10（已于 2026-10-01 结束生命周期），
-  3.13 已在 CI 中测试。在 3.10 上，pip 会继续解析到 v0.76.x；要升级，请换到 3.11、3.12 或 3.13 的环境。
-- **破坏性变更：移除 AWQ 和 GPTQ 导出。** 在弃用一个版本之后移除：两个上游项目都已归档。
-  `soup export --format awq` / `--format gptq` 和 `soup quantize --to awq` / `--to gptq` 现在会失败；
-  请改用 `gguf`、`onnx`、`tensorrt`、`bitnet` 或 `tq1_0`。
-- **DPO 和 ORPO 在 Apple Silicon 上原生运行。** 使用 `backend: mlx` 的 `task: dpo` 和 `task: orpo`
-  通过 Soup 自己的 MLX 训练循环训练（DPO 用 TRL 的 sigmoid 损失和 `dpo_beta`；ORPO 用 TRL 的 ORPO
-  目标和 `orpo_beta`，不需要参考模型）。MLX 文本 SFT 新增原生 DoRA（`lora.use_dora: true`）和
-  `training.eval_steps`。`lora.use_rslora` 现在会在 MLX 和 Unsloth 上生效，因此那里的 rsLoRA 运行会按
-  它所要求的缩放训练，结果也会随之改变。
-- **Layer streaming 支持 DeepSeek-V3。** `model_type: deepseek_v3` 可以流式加载，常驻与流式在前向和
-  反向上结果一致；FP8 分块量化的 checkpoint（DeepSeek-V3 发布时所用的格式）会在分片时反量化；
-  `training.stream_expert_layout: per_expert` 一次只流式加载一个被路由到的专家。在一台 RTX 5070
-  Laptop 8 GB 上，Moonlight-16B LoRA 的 GPU 显存峰值为 1.0 GB，而 fused 布局为 3.1 GB，每步耗时约为
-  2.7x（[记录](benchmarks/probe-rtx5070-moonlight-16b.md)）。`training.stream_loss_chunk` 按 token
-  分块运行输出头和损失（`sft`；尚未在 GPU 上测量）。需显式开启（`stream_layers: true`），仍是 BETA。
+- **破坏性变更：Python 3.11–3.13，不再支持 AWQ 和 GPTQ 导出。** 不再支持 Python 3.10（已于
+  2026-10-01 结束生命周期），3.13 已在 CI 中测试；在 3.10 上，pip 会继续解析到 v0.76.x。
+  `soup export --format awq` / `gptq` 和 `soup quantize --to awq` / `gptq` 在弃用一个版本之后被移除，
+  因为两个上游项目都已归档：请改用 `gguf`、`onnx`、`tensorrt`、`bitnet` 或 `tq1_0`，或继续使用 v0.76.x。
+- **DPO、ORPO 和 SimPO 在 Apple Silicon 上原生运行。** 使用 `backend: mlx` 的 `task: dpo`、`orpo` 和
+  `simpo` 通过 Soup 自己的 MLX 训练循环、按 TRL 的目标函数训练（ORPO 和 SimPO 不需要参考模型）。MLX
+  文本 SFT 新增原生 DoRA、`training.eval_steps` 和损失看门狗（loss watchdog）。`lora.use_rslora` 现在会在
+  MLX 和 Unsloth 上生效，因此那里的 rsLoRA 运行会按它所要求的缩放训练，结果也会随之改变。
+- **Layer streaming 支持 DeepSeek-V3 系列 MoE。** Soup 的 layer streaming（L2L 的一种实现，
+  Pudipeddi et al. 2020）现在可以流式加载 `model_type: deepseek_v3`，常驻与流式在前向和反向上结果一致；
+  FP8 分块量化的 checkpoint（该系列发布时所用的格式）会在分片时反量化。Kimi-K2-Base 和 -Instruct 的配置
+  要先通过逐字段检查才会被接受（一个 K2 形状的小 checkpoint 在 CPU 上逐位一致地流式运行；没有在 K2 本身上
+  训练过任何东西）。`training.stream_expert_layout: per_expert` 一次只流式加载一个被路由到的专家：在一台
+  RTX 5070 Laptop 8 GB 上，Moonlight-16B LoRA 的 GPU 显存峰值为 1.0 GB，而 fused 布局为 3.1 GB，每步耗时
+  约为 2.7x（[记录](benchmarks/probe-rtx5070-moonlight-16b.md)）。需显式开启（`stream_layers: true`），BETA。
 - **可核验的来源（provenance）。** `soup registry push --data <file>` 记录训练文件的 SHA-256，
-  `--idempotency-key` 让推送可以安全重试；在 transformers 后端上，运行会记录它所加载基座模型的 Hub
-  commit；`soup ship --require-provenance` 会把证据与它盖章时记录的 adapter、任务和源数据字节、评测
-  套件版本以及判定策略进行比对。
-- **由代码生成的参考页面。** [`docs/config-reference.md`](docs/config-reference.md) 列出每个
-  `soup.yaml` 键及其类型、默认值和取值范围，[`docs/cli-reference.md`](docs/cli-reference.md) 列出每个
-  命令和选项；任一页面不再如实陈述代码的行为时，测试套件就会失败。
+  `--idempotency-key` 让推送可以安全重试；在 transformers 后端上，常驻、layer streaming 和多 GPU 运行都会
+  记录它们所加载基座模型的 Hub commit；`soup ship --require-provenance` 会把证据与它盖章时记录的
+  adapter、任务和源数据字节、评测套件版本以及判定策略进行比对。
+- **其他新内容。** `soup --version`；GRPO 可以用 LLM 评审打分（`training.reward_fn: judge_rank`，每个
+  提示词的一组补全只调用一次评审）；[`docs/config-reference.md`](docs/config-reference.md) 和
+  [`docs/cli-reference.md`](docs/cli-reference.md) 由代码生成，任一页面不再如实陈述代码的行为时，测试套件
+  就会失败。
 
 更早的更新记录在 [GitHub Releases](https://github.com/MakazhanAlpamys/Soup/releases) 页面。
 

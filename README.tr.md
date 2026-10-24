@@ -106,36 +106,37 @@ yapılandırma v0.77'de yüklenmeyebilir: önce `soup doctor --config soup.yaml`
   sonra bekletmeye alındı; bu yüzden hiçbir sürüm önce onlar hakkında uyarmadı. Değerler:
   `data.remove_unused_columns: true`, hiç niceleme yapmayan bir görevde `training.quantization: 4bit` /
   `8bit` (veya `load_in_8bit: true`) ve artık çıkış kodu 2 ile biten `soup ab --beta`.
-- **Geriye dönük uyumsuz değişiklik: Python 3.11–3.13.** Python 3.10 artık desteklenmiyor (destek
-  süresi 2026-10-01'de sona erdi) ve 3.13 CI'da test ediliyor. 3.10'da pip v0.76.x'i seçmeye devam
-  ediyor; yükseltmek için 3.11, 3.12 veya 3.13 ortamına geçin.
-- **Geriye dönük uyumsuz değişiklik: AWQ ve GPTQ dışa aktarımı kaldırıldı;** bir sürüm boyunca
-  kullanımdan kaldırılmış olarak kaldıktan sonra: her iki üst proje de arşivlenmiş durumda.
-  `soup export --format awq` / `--format gptq` ve `soup quantize --to awq` / `--to gptq` artık hata
-  veriyor; `gguf`, `onnx`, `tensorrt`, `bitnet` veya `tq1_0` kullanın.
-- **DPO ve ORPO, Apple Silicon üzerinde yerel olarak çalışıyor.** `backend: mlx` ile `task: dpo` ve
-  `task: orpo`, Soup'un kendi MLX döngüsüyle eğitiliyor (`dpo_beta` ile TRL'nin sigmoid kaybı; `orpo_beta`
-  ile TRL'nin ORPO hedefi, referans model olmadan). MLX metin SFT'si yerel DoRA (`lora.use_dora: true`)
-  ve `training.eval_steps` kazandı. `lora.use_rslora` artık MLX ve Unsloth üzerinde uygulanıyor; bu
+- **Geriye dönük uyumsuz değişiklik: Python 3.11–3.13; AWQ ve GPTQ dışa aktarımı yok.** Python 3.10
+  artık desteklenmiyor (destek süresi 2026-10-01'de sona erdi) ve 3.13 CI'da test ediliyor; 3.10'da pip
+  v0.76.x'i seçmeye devam ediyor. `soup export --format awq` / `gptq` ve `soup quantize --to awq` /
+  `gptq`, bir sürüm boyunca kullanımdan kaldırılmış olarak kaldıktan sonra kaldırıldı, çünkü her iki üst
+  proje de arşivlenmiş durumda: `gguf`, `onnx`, `tensorrt`, `bitnet` veya `tq1_0` kullanın ya da
+  v0.76.x'te kalın.
+- **DPO, ORPO ve SimPO, Apple Silicon üzerinde yerel olarak çalışıyor.** `backend: mlx` ile
+  `task: dpo`, `orpo` ve `simpo`, Soup'un kendi MLX döngüsüyle TRL'nin hedefleri üzerinden eğitiliyor
+  (ORPO ve SimPO referans model olmadan). MLX metin SFT'si yerel DoRA, `training.eval_steps` ve kayıp
+  bekçisini (loss watchdog) kazandı. `lora.use_rslora` artık MLX ve Unsloth üzerinde uygulanıyor; bu
   yüzden oradaki bir rsLoRA çalıştırması istediği ölçekte eğitiliyor ve sonuçları değişiyor.
-- **Katman akışı DeepSeek-V3'e ulaştı.** `model_type: deepseek_v3`, yerleşik ve akışlı model arasında
-  ileri ve geri geçişte eşlikle (parity) akıyor; DeepSeek-V3'ün yayımlandığı biçim olan FP8 blok
-  nicelemeli checkpoint'ler, parçalama (shard) sırasında nicelemeden çözülüyor;
-  `training.stream_expert_layout: per_expert` ise her seferinde tek bir yönlendirilmiş uzmanı akıtıyor.
-  Tek bir RTX 5070 Laptop 8 GB üzerinde Moonlight-16B LoRA, birleşik (fused) düzendeki 3.1 GB'a karşı
+- **Katman akışı DeepSeek-V3 ailesinin MoE modellerine ulaştı.** Soup'un katman akışı (L2L'nin bir
+  uygulaması, Pudipeddi et al. 2020) artık `model_type: deepseek_v3` modelini, yerleşik ve akışlı model
+  arasında ileri ve geri geçişte eşlikle (parity) akıtıyor; ailenin yayımlandığı biçim olan FP8 blok
+  nicelemeli checkpoint'ler parçalama (shard) sırasında nicelemeden çözülüyor. Kimi-K2-Base ve
+  -Instruct yapılandırmaları alan alan bir denetimden geçerek kabul ediliyor (K2 biçimindeki küçük bir
+  checkpoint CPU'da bit bit aynı sonuçla akıyor; K2'nin kendisi üzerinde hiçbir şey eğitilmedi).
+  `training.stream_expert_layout: per_expert` her seferinde tek bir yönlendirilmiş uzmanı akıtıyor:
+  tek bir RTX 5070 Laptop 8 GB üzerinde Moonlight-16B LoRA, birleşik (fused) düzendeki 3.1 GB'a karşı
   1.0 GB GPU belleğiyle zirve yaptı; adım süresi yaklaşık 2.7x
-  ([kayıt](benchmarks/probe-rtx5070-moonlight-16b.md)). `training.stream_loss_chunk`, çıktı başlığını ve
-  kaybı her seferinde bir token öbeği üzerinde çalıştırıyor (`sft`; henüz bir GPU'da ölçülmedi).
-  İsteğe bağlıdır (`stream_layers: true`) ve hâlâ BETA.
+  ([kayıt](benchmarks/probe-rtx5070-moonlight-16b.md)). İsteğe bağlıdır (`stream_layers: true`), BETA.
 - **Doğrulanabilir köken (provenance).** `soup registry push --data <file>` eğitim dosyasının SHA-256
   özetini kaydediyor ve `--idempotency-key` bir gönderimi yeniden denemeye güvenli hâle getiriyor;
-  transformers arka ucunda bir çalıştırma, yüklediği temel modelin Hub commit'ini kaydediyor;
-  `soup ship --require-provenance` kanıtı, damgalandığı adaptör, görev ve kaynak baytları, paket (suite)
-  sürümü ve karar politikasıyla karşılaştırıyor.
-- **Koddan üretilen başvuru sayfaları.**
-  [`docs/config-reference.md`](docs/config-reference.md) her `soup.yaml` anahtarını türü, varsayılanı
-  ve sınırlarıyla, [`docs/cli-reference.md`](docs/cli-reference.md) ise her komutu ve seçeneği
-  listeliyor; bu sayfalardan biri kodun yaptığını artık söylemediğinde test paketi başarısız oluyor.
+  transformers arka ucunda yerleşik, katman akışlı ve çoklu GPU çalıştırmaları, yükledikleri temel
+  modelin Hub commit'ini kaydediyor; `soup ship --require-provenance` kanıtı, damgalandığı adaptör,
+  görev ve kaynak baytları, paket (suite) sürümü ve karar politikasıyla karşılaştırıyor.
+- **Ayrıca yeni.** `soup --version`; GRPO artık bir LLM hakemiyle değerlendirme yapabiliyor
+  (`training.reward_fn: judge_rank`, her istemin tamamlama grubu için tek bir hakem çağrısı); ve
+  [`docs/config-reference.md`](docs/config-reference.md) ile
+  [`docs/cli-reference.md`](docs/cli-reference.md) koddan üretiliyor; bu sayfalardan biri kodun
+  yaptığını artık söylemediğinde test paketi başarısız oluyor.
 
 Eski sürümlerin öne çıkanları [GitHub Releases](https://github.com/MakazhanAlpamys/Soup/releases) sayfasında.
 

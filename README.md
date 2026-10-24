@@ -104,34 +104,35 @@ loading on v0.77: run `soup doctor --config soup.yaml` first.
   them first. The values: `data.remove_unused_columns: true`, `training.quantization: 4bit` /
   `8bit` (or `load_in_8bit: true`) on a task that never quantises, and `soup ab --beta`, which
   now exits 2.
-- **Breaking: Python 3.11–3.13.** Python 3.10 is no longer supported (end of life 2026-10-01),
-  and 3.13 is tested in CI. On 3.10, pip keeps resolving v0.76.x; move to a 3.11, 3.12 or 3.13
-  environment to upgrade.
-- **Breaking: AWQ and GPTQ export are removed,** after one release as deprecated: both upstream
-  projects are archived. `soup export --format awq` / `--format gptq` and `soup quantize --to awq`
-  / `--to gptq` now fail; use `gguf`, `onnx`, `tensorrt`, `bitnet` or `tq1_0`.
-- **DPO and ORPO run natively on Apple Silicon.** `task: dpo` and `task: orpo` with
-  `backend: mlx` train through Soup's own MLX loop (TRL's sigmoid loss with `dpo_beta`; TRL's
-  ORPO objective with `orpo_beta`, no reference model). MLX text SFT gains native DoRA
-  (`lora.use_dora: true`) and `training.eval_steps`. `lora.use_rslora` is now applied on MLX and
-  Unsloth, so an rsLoRA run there trains at the scale it asked for, and its results change.
-- **Layer streaming reaches DeepSeek-V3.** `model_type: deepseek_v3` streams with
-  resident-vs-streamed parity forward and backward; FP8 block-quantised checkpoints, the format
-  DeepSeek-V3 is published in, are dequantised at shard time; and
-  `training.stream_expert_layout: per_expert` streams one routed expert at a time. On one RTX
-  5070 Laptop 8 GB, Moonlight-16B LoRA peaked at 1.0 GB of GPU memory against 3.1 GB fused, at
-  about 2.7x the step time ([record](benchmarks/probe-rtx5070-moonlight-16b.md)).
-  `training.stream_loss_chunk` runs the output head and the loss a chunk of tokens at a time
-  (`sft`; not yet measured on a GPU). Opt-in (`stream_layers: true`) and still BETA.
+- **Breaking: Python 3.11–3.13, and no AWQ or GPTQ export.** Python 3.10 is no longer supported
+  (end of life 2026-10-01) and 3.13 is tested in CI; on 3.10, pip keeps resolving v0.76.x.
+  `soup export --format awq` / `gptq` and `soup quantize --to awq` / `gptq` are removed after one
+  release as deprecated, because both upstream projects are archived: use `gguf`, `onnx`,
+  `tensorrt`, `bitnet` or `tq1_0`, or stay on v0.76.x.
+- **DPO, ORPO and SimPO run natively on Apple Silicon.** `task: dpo`, `orpo` and `simpo` with
+  `backend: mlx` train through Soup's own MLX loop on TRL's objectives (ORPO and SimPO with no
+  reference model). MLX text SFT gains native DoRA, `training.eval_steps` and the loss watchdog.
+  `lora.use_rslora` is now applied on MLX and Unsloth, so an rsLoRA run there trains at the
+  scale it asked for, and its results change.
+- **Layer streaming reaches DeepSeek-V3-family MoE.** Soup's layer streaming (an implementation
+  of L2L, Pudipeddi et al. 2020) now streams `model_type: deepseek_v3` with resident-vs-streamed
+  parity forward and backward, and FP8 block-quantised checkpoints, the format the family is
+  published in, are dequantised at shard time. Kimi-K2-Base and -Instruct configs are admitted
+  behind a field-by-field check (a tiny K2-shaped checkpoint streams bit for bit on CPU; nothing
+  has been trained on K2 itself). `training.stream_expert_layout: per_expert` streams one routed
+  expert at a time: on one RTX 5070 Laptop 8 GB, Moonlight-16B LoRA peaked at 1.0 GB of GPU
+  memory against 3.1 GB fused, at about 2.7x the step time
+  ([record](benchmarks/probe-rtx5070-moonlight-16b.md)). Opt-in (`stream_layers: true`), BETA.
 - **Provenance you can check.** `soup registry push --data <file>` records the training file's
-  SHA-256, and `--idempotency-key` makes a push safe to retry; on the transformers backend a run
-  records the Hub commit of the base it loaded; `soup ship --require-provenance` checks the
-  evidence against the adapter, task and source bytes, suite version and verdict policy it was
-  stamped with.
-- **Reference pages generated from the code.**
-  [`docs/config-reference.md`](docs/config-reference.md) lists every `soup.yaml` key with its
-  type, default and bounds, and [`docs/cli-reference.md`](docs/cli-reference.md) every command
-  and option; the test suite fails when either stops stating what the code does.
+  SHA-256, and `--idempotency-key` makes a push safe to retry; on the transformers backend,
+  resident, layer-streamed and multi-GPU runs record the Hub commit of the base they loaded;
+  `soup ship --require-provenance` checks the evidence against the adapter, task and source
+  bytes, suite version and verdict policy it was stamped with.
+- **Also new.** `soup --version`; GRPO can score with an LLM judge
+  (`training.reward_fn: judge_rank`, one judge call per prompt's group of completions); and
+  [`docs/config-reference.md`](docs/config-reference.md) and
+  [`docs/cli-reference.md`](docs/cli-reference.md) are generated from the code, and the test
+  suite fails when either stops stating what the code does.
 
 Older highlights live on the [GitHub Releases](https://github.com/MakazhanAlpamys/Soup/releases) page.
 

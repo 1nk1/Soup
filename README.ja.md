@@ -105,35 +105,36 @@ v0.77 では読み込めなくなることがあります。まず `soup doctor 
   リリースはありません。値は、`data.remove_unused_columns: true`、量子化を一切行わないタスクでの
   `training.quantization: 4bit` / `8bit`（または `load_in_8bit: true`）、そして終了コード 2 で
   終了するようになった `soup ab --beta` です。
-- **破壊的変更: Python 3.11–3.13。** Python 3.10 はサポート対象外になり（2026-10-01 にサポート終了）、
-  3.13 が CI でテストされます。3.10 では pip は引き続き v0.76.x を解決します。アップグレードするには、
-  3.11、3.12、3.13 のいずれかの環境に移行してください。
-- **破壊的変更: AWQ と GPTQ のエクスポートは削除されました。** 一リリースの非推奨期間を経ての削除で、
-  どちらの上流プロジェクトもアーカイブ済みです。`soup export --format awq` / `--format gptq` と
-  `soup quantize --to awq` / `--to gptq` は失敗するようになりました。`gguf`、`onnx`、`tensorrt`、
-  `bitnet`、`tq1_0` を使ってください。
-- **DPO と ORPO が Apple Silicon でネイティブに動作します。** `backend: mlx` での `task: dpo` と
-  `task: orpo` は、Soup 独自の MLX ループで学習します（`dpo_beta` による TRL の sigmoid 損失、
-  `orpo_beta` による TRL の ORPO 目的関数で、参照モデルは不要）。MLX のテキスト SFT は、ネイティブ DoRA
-  （`lora.use_dora: true`）と `training.eval_steps` に対応しました。`lora.use_rslora` は MLX と Unsloth で
-  適用されるようになったため、そこでの rsLoRA 実行は要求したスケールで学習し、結果が変わります。
-- **レイヤーストリーミングが DeepSeek-V3 に対応しました。** `model_type: deepseek_v3` は、常駐と
-  ストリーミングでフォワードとバックワードの一致（パリティ）を確認したうえでストリーミングされます。
-  DeepSeek-V3 の公開形式である FP8 ブロック量子化チェックポイントは、シャード時に逆量子化されます。
+- **破壊的変更: Python 3.11–3.13、AWQ と GPTQ のエクスポートは廃止。** Python 3.10 はサポート対象外に
+  なり（2026-10-01 にサポート終了）、3.13 が CI でテストされます。3.10 では pip は引き続き v0.76.x を
+  解決します。`soup export --format awq` / `gptq` と `soup quantize --to awq` / `gptq` は、一リリースの
+  非推奨期間を経て削除されました。どちらの上流プロジェクトもアーカイブ済みのためです。`gguf`、`onnx`、
+  `tensorrt`、`bitnet`、`tq1_0` を使うか、v0.76.x にとどまってください。
+- **DPO、ORPO、SimPO が Apple Silicon でネイティブに動作します。** `backend: mlx` での `task: dpo`、
+  `orpo`、`simpo` は、Soup 独自の MLX ループで TRL の目的関数に従って学習します（ORPO と SimPO は参照
+  モデル不要）。MLX のテキスト SFT は、ネイティブ DoRA、`training.eval_steps`、損失ウォッチドッグに
+  対応しました。`lora.use_rslora` は MLX と Unsloth で適用されるようになったため、そこでの rsLoRA 実行は
+  要求したスケールで学習し、結果が変わります。
+- **レイヤーストリーミングが DeepSeek-V3 系の MoE に対応しました。** Soup のレイヤーストリーミング
+  （L2L の実装、Pudipeddi et al. 2020）は、`model_type: deepseek_v3` を、常駐とストリーミングで
+  フォワードとバックワードの一致（パリティ）を確認したうえでストリーミングします。この系統の公開形式で
+  ある FP8 ブロック量子化チェックポイントは、シャード時に逆量子化されます。Kimi-K2-Base と -Instruct の
+  設定は、フィールドごとの検査を通ったうえで受け入れられます（K2 形状の小さなチェックポイントが CPU 上で
+  ビット単位で一致してストリーミングされます。K2 そのものでは何も学習していません）。
   `training.stream_expert_layout: per_expert` は、ルーティングされたエキスパートを一つずつストリーミング
   します。RTX 5070 Laptop 8 GB 一台で、Moonlight-16B の LoRA は、fused の 3.1 GB に対して GPU メモリの
   ピークが 1.0 GB で、ステップ時間は約 2.7x でした（[記録](benchmarks/probe-rtx5070-moonlight-16b.md)）。
-  `training.stream_loss_chunk` は、出力ヘッドと損失をトークンのチャンクごとに実行します（`sft`。
-  GPU ではまだ計測していません）。オプトイン方式（`stream_layers: true`）で、まだ BETA です。
+  オプトイン方式（`stream_layers: true`）で、BETA です。
 - **検証できる来歴（provenance）。** `soup registry push --data <file>` は学習ファイルの SHA-256 を
-  記録し、`--idempotency-key` によりプッシュを安全に再試行できます。transformers バックエンドでは、
-  実行が読み込んだベースモデルの Hub コミットを記録します。`soup ship --require-provenance` は、
-  エビデンスを、それに刻まれたアダプター・タスク・ソースのバイト列、スイートのバージョン、判定ポリシーと
-  照合します。
-- **コードから生成されるリファレンスページ。**
-  [`docs/config-reference.md`](docs/config-reference.md) はすべての `soup.yaml` キーを型・既定値・範囲と
-  ともに、[`docs/cli-reference.md`](docs/cli-reference.md) はすべてのコマンドとオプションを列挙します。
-  どちらかがコードの動作を正しく述べなくなると、テストスイートが失敗します。
+  記録し、`--idempotency-key` によりプッシュを安全に再試行できます。transformers バックエンドでは、常駐、
+  レイヤーストリーミング、マルチ GPU の各実行が、読み込んだベースモデルの Hub コミットを記録します。
+  `soup ship --require-provenance` は、エビデンスを、それに刻まれたアダプター・タスク・ソースのバイト列、
+  スイートのバージョン、判定ポリシーと照合します。
+- **その他の新機能。** `soup --version`。GRPO が LLM ジャッジで採点できるようになりました
+  （`training.reward_fn: judge_rank`。プロンプトごとの補完のグループに対して、ジャッジの呼び出しは一回）。
+  そして [`docs/config-reference.md`](docs/config-reference.md) と
+  [`docs/cli-reference.md`](docs/cli-reference.md) はコードから生成され、どちらかがコードの動作を正しく
+  述べなくなると、テストスイートが失敗します。
 
 過去のハイライトは [GitHub Releases](https://github.com/MakazhanAlpamys/Soup/releases) ページにあります。
 
