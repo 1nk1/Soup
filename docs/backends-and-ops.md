@@ -1095,8 +1095,8 @@ are left in place.
 The new nullable `runs.base_revision`, `runs.base_revision_source` and
 `runs.training_data_sha256` columns upgrade existing databases in place. Historical
 rows stay unknown; Soup never fills them from today's Hub state or dataset bytes.
-Training-data hash capture remains separate work (#1764 part 2); this change reserves
-its storage/transfer contract without hashing training inputs.
+`soup train` fills `runs.training_data_sha256` at startup for a bounded, complete local
+text-training source (#2024); every other input stays unknown.
 
 An unavailable/offline Hub metadata lookup preserves the existing load flow and
 records an unknown revision. A local `snapshots/<40-hex>` directory records

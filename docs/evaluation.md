@@ -695,7 +695,7 @@ source can also be compared at verdict time; remote, mixed, replay, tokenized,
 streaming and directory sources stay unknown. When that source is unknown,
 strict verification requires the caller assertion. Neither this descriptor nor
 legacy `data_sha` relabels a verdict-time hash as training-time evidence. The
-startup producer tracked in #1764 is separate.
+training-time digest that `soup train` records at startup (#2024) is a separate record.
 
 The strict mode requires offline `--evidence`, `--config`, a local nonempty
 `--adapter` manifest and a readable task-eval file; it does not claim identity for
