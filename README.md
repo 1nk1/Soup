@@ -98,40 +98,44 @@ loading on v0.77: run `soup doctor --config soup.yaml` first.
 
 - **Breaking: staged fields and deprecated values are refused.** Among the fields:
   `training.lr_groups`, `early_stop_patience`, `forgetting_eval_steps`, `checkpoint_eval_*`,
-  `quantize_ref_model`, `long_context_grpo` and `vision_grpo`, and `data.split_thinking` and the
-  `data.video_*` keys. Two of them, `training.rl_checkpoint_include_ref_model` and
-  `rl_checkpoint_include_rollout_buffer`, were staged after v0.76.0, so no release warned about
+  `quantize_ref_model`, `long_context_grpo`, `vision_grpo`, `data.split_thinking` and the
+  `data.video_*` keys. `training.rl_checkpoint_include_ref_model` and
+  `rl_checkpoint_include_rollout_buffer` were staged after v0.76.0, so no release warned about
   them first. The values: `data.remove_unused_columns: true`, `training.quantization: 4bit` /
-  `8bit` (or `load_in_8bit: true`) on a task that never quantises, and `soup ab --beta`, which
-  now exits 2.
-- **Breaking: Python 3.11–3.13, and no AWQ or GPTQ export.** Python 3.10 is no longer supported
-  (end of life 2026-10-01) and 3.13 is tested in CI; on 3.10, pip keeps resolving v0.76.x.
-  `soup export --format awq` / `gptq` and `soup quantize --to awq` / `gptq` are removed after one
-  release as deprecated, because both upstream projects are archived: use `gguf`, `onnx`,
-  `tensorrt`, `bitnet` or `tq1_0`, or stay on v0.76.x.
-- **DPO, ORPO and SimPO run natively on Apple Silicon.** `task: dpo`, `orpo` and `simpo` with
-  `backend: mlx` train through Soup's own MLX loop on TRL's objectives (ORPO and SimPO with no
-  reference model). MLX text SFT gains native DoRA, `training.eval_steps` and the loss watchdog.
-  `lora.use_rslora` is now applied on MLX and Unsloth, so an rsLoRA run there trains at the
-  scale it asked for, and its results change.
+  `8bit` (or `load_in_8bit: true`) on a task that never quantises, and `soup ab --beta`.
+- **Breaking: Python 3.11–3.13, no AWQ or GPTQ export, a token for two `soup serve` routes.**
+  Python 3.10 is no longer supported (end of life 2026-10-01); on 3.10, pip keeps resolving
+  v0.76.x. `soup export --format awq` / `gptq` and `soup quantize --to awq` / `gptq` are removed,
+  because both upstream projects are archived: use `gguf`, `onnx`, `tensorrt`, `bitnet` or
+  `tq1_0`, or stay on v0.76.x. `/v1/tools/python` and `/v1/tools/bash` answer 401 unless the
+  server was started with `--tool-auth-token` (or `SOUP_TOOL_AUTH_TOKEN`), on every bind, and
+  `/v1/tools/python` answers 501 where the host has no OS-level isolation, as bash already did.
+- **DPO, ORPO, SimPO and KTO run natively on Apple Silicon.** `task: dpo`, `orpo`, `simpo` and
+  `kto` with `backend: mlx` train through Soup's own MLX loop on TRL's objectives (ORPO and SimPO
+  with no reference model). MLX text SFT gains native DoRA, `training.eval_steps`,
+  `training.seed` and the loss watchdog. `lora.use_rslora` is now applied on MLX and Unsloth, so
+  an rsLoRA run there trains at the scale it asked for, and its results change.
 - **Layer streaming reaches DeepSeek-V3-family MoE.** Soup's layer streaming (an implementation
   of L2L, Pudipeddi et al. 2020) now streams `model_type: deepseek_v3` with resident-vs-streamed
-  parity forward and backward, and FP8 block-quantised checkpoints, the format the family is
-  published in, are dequantised at shard time. Kimi-K2-Base and -Instruct configs are admitted
-  behind a field-by-field check (a tiny K2-shaped checkpoint streams bit for bit on CPU; nothing
-  has been trained on K2 itself). `training.stream_expert_layout: per_expert` streams one routed
-  expert at a time: on one RTX 5070 Laptop 8 GB, Moonlight-16B LoRA peaked at 1.0 GB of GPU
-  memory against 3.1 GB fused, at about 2.7x the step time
-  ([record](benchmarks/probe-rtx5070-moonlight-16b.md)). Opt-in (`stream_layers: true`), BETA.
+  parity forward and backward, and dequantises FP8 block-quantised checkpoints at shard time.
+  Kimi-K2-Base and -Instruct are admitted behind a field-by-field check (a tiny K2-shaped
+  checkpoint streams bit for bit on CPU; nothing has been trained on K2 itself).
+  `training.stream_expert_layout: per_expert` streams one routed expert at a time: on one RTX
+  5070 Laptop 8 GB, Moonlight-16B LoRA peaked at 1.0 GB of GPU memory against 3.1 GB fused, at
+  about 2.7x the step time ([record](benchmarks/probe-rtx5070-moonlight-16b.md)).
+  `training.stream_recompute: off` / `auto` keeps streamed activations instead of recomputing
+  them, with bit-identical gradients: on the same card's RAM tier a Mistral-7B NF4 step is 22%
+  faster at 512 tokens and 8.5% at 2048 ([record](benchmarks/gate-stream-recompute.md)).
+  Opt-in (`stream_layers: true`), BETA.
 - **Provenance you can check.** `soup registry push --data <file>` records the training file's
   SHA-256, and `--idempotency-key` makes a push safe to retry; on the transformers backend,
   resident, layer-streamed and multi-GPU runs record the Hub commit of the base they loaded;
   `soup ship --require-provenance` checks the evidence against the adapter, task and source
   bytes, suite version and verdict policy it was stamped with.
-- **Also new.** `soup --version`; GRPO can score with an LLM judge
-  (`training.reward_fn: judge_rank`, one judge call per prompt's group of completions); and
-  [`docs/config-reference.md`](docs/config-reference.md) and
-  [`docs/cli-reference.md`](docs/cli-reference.md) are generated from the code, and the test
+- **Also new.** `soup --version`; `pip install "soup-cli[documents]"` for PDF and DOCX in
+  `soup data ingest`; `soup merge --low-memory`; GRPO can score with an LLM judge
+  (`training.reward_fn: judge_rank`); and [`docs/config-reference.md`](docs/config-reference.md)
+  and [`docs/cli-reference.md`](docs/cli-reference.md) are generated from the code, and the test
   suite fails when either stops stating what the code does.
 
 Older highlights live on the [GitHub Releases](https://github.com/MakazhanAlpamys/Soup/releases) page.

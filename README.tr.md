@@ -100,40 +100,46 @@ yapılandırma v0.77'de yüklenmeyebilir: önce `soup doctor --config soup.yaml`
 
 - **Geriye dönük uyumsuz değişiklik: bekletilen (staged) alanlar ve kullanımdan kaldırılmış değerler
   reddediliyor.** Alanlar arasında `training.lr_groups`, `early_stop_patience`, `forgetting_eval_steps`,
-  `checkpoint_eval_*`, `quantize_ref_model`, `long_context_grpo` ve `vision_grpo` ile
-  `data.split_thinking` ve `data.video_*` anahtarları var. Bunlardan ikisi,
-  `training.rl_checkpoint_include_ref_model` ve `rl_checkpoint_include_rollout_buffer`, v0.76.0'dan
-  sonra bekletmeye alındı; bu yüzden hiçbir sürüm önce onlar hakkında uyarmadı. Değerler:
-  `data.remove_unused_columns: true`, hiç niceleme yapmayan bir görevde `training.quantization: 4bit` /
-  `8bit` (veya `load_in_8bit: true`) ve artık çıkış kodu 2 ile biten `soup ab --beta`.
-- **Geriye dönük uyumsuz değişiklik: Python 3.11–3.13; AWQ ve GPTQ dışa aktarımı yok.** Python 3.10
-  artık desteklenmiyor (destek süresi 2026-10-01'de sona erdi) ve 3.13 CI'da test ediliyor; 3.10'da pip
-  v0.76.x'i seçmeye devam ediyor. `soup export --format awq` / `gptq` ve `soup quantize --to awq` /
-  `gptq`, bir sürüm boyunca kullanımdan kaldırılmış olarak kaldıktan sonra kaldırıldı, çünkü her iki üst
-  proje de arşivlenmiş durumda: `gguf`, `onnx`, `tensorrt`, `bitnet` veya `tq1_0` kullanın ya da
-  v0.76.x'te kalın.
-- **DPO, ORPO ve SimPO, Apple Silicon üzerinde yerel olarak çalışıyor.** `backend: mlx` ile
-  `task: dpo`, `orpo` ve `simpo`, Soup'un kendi MLX döngüsüyle TRL'nin hedefleri üzerinden eğitiliyor
-  (ORPO ve SimPO referans model olmadan). MLX metin SFT'si yerel DoRA, `training.eval_steps` ve kayıp
-  bekçisini (loss watchdog) kazandı. `lora.use_rslora` artık MLX ve Unsloth üzerinde uygulanıyor; bu
-  yüzden oradaki bir rsLoRA çalıştırması istediği ölçekte eğitiliyor ve sonuçları değişiyor.
+  `checkpoint_eval_*`, `quantize_ref_model`, `long_context_grpo`, `vision_grpo`, `data.split_thinking`
+  ve `data.video_*` anahtarları var. `training.rl_checkpoint_include_ref_model` ve
+  `rl_checkpoint_include_rollout_buffer` v0.76.0'dan sonra bekletmeye alındı; bu yüzden hiçbir sürüm
+  önce onlar hakkında uyarmadı. Değerler: `data.remove_unused_columns: true`, hiç niceleme yapmayan bir
+  görevde `training.quantization: 4bit` / `8bit` (veya `load_in_8bit: true`) ve `soup ab --beta`.
+- **Geriye dönük uyumsuz değişiklik: Python 3.11–3.13, AWQ ve GPTQ dışa aktarımı yok, iki `soup serve`
+  rotası için belirteç.** Python 3.10 artık desteklenmiyor (destek süresi 2026-10-01'de sona erdi);
+  3.10'da pip v0.76.x'i seçmeye devam ediyor. `soup export --format awq` / `gptq` ve
+  `soup quantize --to awq` / `gptq` kaldırıldı, çünkü her iki üst proje de arşivlenmiş durumda: `gguf`,
+  `onnx`, `tensorrt`, `bitnet` veya `tq1_0` kullanın ya da v0.76.x'te kalın. `/v1/tools/python` ve
+  `/v1/tools/bash`, sunucu `--tool-auth-token` (veya `SOUP_TOOL_AUTH_TOKEN`) ile başlatılmadıysa her
+  bağlamada 401 döndürüyor; `/v1/tools/python`, ana makinede işletim sistemi düzeyinde yalıtım yoksa
+  bash'in zaten yaptığı gibi 501 döndürüyor.
+- **DPO, ORPO, SimPO ve KTO, Apple Silicon üzerinde yerel olarak çalışıyor.** `backend: mlx` ile
+  `task: dpo`, `orpo`, `simpo` ve `kto`, Soup'un kendi MLX döngüsüyle TRL'nin hedefleri üzerinden
+  eğitiliyor (ORPO ve SimPO referans model olmadan). MLX metin SFT'si yerel DoRA,
+  `training.eval_steps`, `training.seed` ve kayıp bekçisini (loss watchdog) kazandı.
+  `lora.use_rslora` artık MLX ve Unsloth üzerinde uygulanıyor; bu yüzden oradaki bir rsLoRA
+  çalıştırması istediği ölçekte eğitiliyor ve sonuçları değişiyor.
 - **Katman akışı DeepSeek-V3 ailesinin MoE modellerine ulaştı.** Soup'un katman akışı (L2L'nin bir
   uygulaması, Pudipeddi et al. 2020) artık `model_type: deepseek_v3` modelini, yerleşik ve akışlı model
-  arasında ileri ve geri geçişte eşlikle (parity) akıtıyor; ailenin yayımlandığı biçim olan FP8 blok
-  nicelemeli checkpoint'ler parçalama (shard) sırasında nicelemeden çözülüyor. Kimi-K2-Base ve
-  -Instruct yapılandırmaları alan alan bir denetimden geçerek kabul ediliyor (K2 biçimindeki küçük bir
-  checkpoint CPU'da bit bit aynı sonuçla akıyor; K2'nin kendisi üzerinde hiçbir şey eğitilmedi).
-  `training.stream_expert_layout: per_expert` her seferinde tek bir yönlendirilmiş uzmanı akıtıyor:
-  tek bir RTX 5070 Laptop 8 GB üzerinde Moonlight-16B LoRA, birleşik (fused) düzendeki 3.1 GB'a karşı
-  1.0 GB GPU belleğiyle zirve yaptı; adım süresi yaklaşık 2.7x
-  ([kayıt](benchmarks/probe-rtx5070-moonlight-16b.md)). İsteğe bağlıdır (`stream_layers: true`), BETA.
+  arasında ileri ve geri geçişte eşlikle (parity) akıtıyor ve FP8 blok nicelemeli checkpoint'leri
+  parçalama (shard) sırasında nicelemeden çözüyor. Kimi-K2-Base ve -Instruct alan alan bir denetimden
+  geçerek kabul ediliyor (K2 biçimindeki küçük bir checkpoint CPU'da bit bit aynı sonuçla akıyor; K2'nin
+  kendisi üzerinde hiçbir şey eğitilmedi). `training.stream_expert_layout: per_expert` her seferinde
+  tek bir yönlendirilmiş uzmanı akıtıyor: tek bir RTX 5070 Laptop 8 GB üzerinde Moonlight-16B LoRA,
+  birleşik (fused) düzendeki 3.1 GB'a karşı 1.0 GB GPU belleğiyle zirve yaptı; adım süresi yaklaşık
+  2.7x ([kayıt](benchmarks/probe-rtx5070-moonlight-16b.md)). `training.stream_recompute: off` /
+  `auto`, akışlı katmanların aktivasyonlarını yeniden hesaplamak yerine saklıyor ve gradyanlar bit bit
+  aynı kalıyor: aynı kartın RAM katmanında bir Mistral-7B NF4 adımı 512 token'da %22, 2048'de %8.5
+  daha hızlı ([kayıt](benchmarks/gate-stream-recompute.md)). İsteğe bağlıdır (`stream_layers: true`),
+  BETA.
 - **Doğrulanabilir köken (provenance).** `soup registry push --data <file>` eğitim dosyasının SHA-256
   özetini kaydediyor ve `--idempotency-key` bir gönderimi yeniden denemeye güvenli hâle getiriyor;
   transformers arka ucunda yerleşik, katman akışlı ve çoklu GPU çalıştırmaları, yükledikleri temel
   modelin Hub commit'ini kaydediyor; `soup ship --require-provenance` kanıtı, damgalandığı adaptör,
   görev ve kaynak baytları, paket (suite) sürümü ve karar politikasıyla karşılaştırıyor.
-- **Ayrıca yeni.** `soup --version`; GRPO artık bir LLM hakemiyle değerlendirme yapabiliyor
-  (`training.reward_fn: judge_rank`, her istemin tamamlama grubu için tek bir hakem çağrısı); ve
+- **Ayrıca yeni.** `soup --version`; `soup data ingest` içinde PDF ve DOCX için
+  `pip install "soup-cli[documents]"`; `soup merge --low-memory`; GRPO artık bir LLM hakemiyle
+  değerlendirme yapabiliyor (`training.reward_fn: judge_rank`); ve
   [`docs/config-reference.md`](docs/config-reference.md) ile
   [`docs/cli-reference.md`](docs/cli-reference.md) koddan üretiliyor; bu sayfalardan biri kodun
   yaptığını artık söylemediğinde test paketi başarısız oluyor.

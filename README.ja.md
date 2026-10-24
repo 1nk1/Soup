@@ -99,40 +99,46 @@ v0.77 では読み込めなくなることがあります。まず `soup doctor 
 
 - **破壊的変更: ステージされたフィールドと非推奨の値は拒否されます。** 対象のフィールドには、
   `training.lr_groups`、`early_stop_patience`、`forgetting_eval_steps`、`checkpoint_eval_*`、
-  `quantize_ref_model`、`long_context_grpo`、`vision_grpo`、そして `data.split_thinking` と
-  `data.video_*` キーが含まれます。そのうち `training.rl_checkpoint_include_ref_model` と
-  `rl_checkpoint_include_rollout_buffer` の二つは v0.76.0 より後にステージされたため、事前に警告した
+  `quantize_ref_model`、`long_context_grpo`、`vision_grpo`、`data.split_thinking`、そして
+  `data.video_*` キーが含まれます。`training.rl_checkpoint_include_ref_model` と
+  `rl_checkpoint_include_rollout_buffer` は v0.76.0 より後にステージされたため、事前に警告した
   リリースはありません。値は、`data.remove_unused_columns: true`、量子化を一切行わないタスクでの
-  `training.quantization: 4bit` / `8bit`（または `load_in_8bit: true`）、そして終了コード 2 で
-  終了するようになった `soup ab --beta` です。
-- **破壊的変更: Python 3.11–3.13、AWQ と GPTQ のエクスポートは廃止。** Python 3.10 はサポート対象外に
-  なり（2026-10-01 にサポート終了）、3.13 が CI でテストされます。3.10 では pip は引き続き v0.76.x を
-  解決します。`soup export --format awq` / `gptq` と `soup quantize --to awq` / `gptq` は、一リリースの
-  非推奨期間を経て削除されました。どちらの上流プロジェクトもアーカイブ済みのためです。`gguf`、`onnx`、
-  `tensorrt`、`bitnet`、`tq1_0` を使うか、v0.76.x にとどまってください。
-- **DPO、ORPO、SimPO が Apple Silicon でネイティブに動作します。** `backend: mlx` での `task: dpo`、
-  `orpo`、`simpo` は、Soup 独自の MLX ループで TRL の目的関数に従って学習します（ORPO と SimPO は参照
-  モデル不要）。MLX のテキスト SFT は、ネイティブ DoRA、`training.eval_steps`、損失ウォッチドッグに
-  対応しました。`lora.use_rslora` は MLX と Unsloth で適用されるようになったため、そこでの rsLoRA 実行は
-  要求したスケールで学習し、結果が変わります。
+  `training.quantization: 4bit` / `8bit`（または `load_in_8bit: true`）、そして `soup ab --beta` です。
+- **破壊的変更: Python 3.11–3.13、AWQ と GPTQ のエクスポートは廃止、`soup serve` の二つのルートに
+  トークンが必要に。** Python 3.10 はサポート対象外になりました（2026-10-01 にサポート終了）。3.10 では
+  pip は引き続き v0.76.x を解決します。`soup export --format awq` / `gptq` と
+  `soup quantize --to awq` / `gptq` は削除されました。どちらの上流プロジェクトもアーカイブ済みのためです。
+  `gguf`、`onnx`、`tensorrt`、`bitnet`、`tq1_0` を使うか、v0.76.x にとどまってください。
+  `/v1/tools/python` と `/v1/tools/bash` は、サーバーが `--tool-auth-token`（または
+  `SOUP_TOOL_AUTH_TOKEN`）付きで起動されていなければ、どのバインドでも 401 を返します。また
+  `/v1/tools/python` は、ホストに OS レベルの分離がない環境では、bash と同じく 501 を返します。
+- **DPO、ORPO、SimPO、KTO が Apple Silicon でネイティブに動作します。** `backend: mlx` での
+  `task: dpo`、`orpo`、`simpo`、`kto` は、Soup 独自の MLX ループで TRL の目的関数に従って学習します
+  （ORPO と SimPO は参照モデル不要）。MLX のテキスト SFT は、ネイティブ DoRA、`training.eval_steps`、
+  `training.seed`、損失ウォッチドッグに対応しました。`lora.use_rslora` は MLX と Unsloth で適用される
+  ようになったため、そこでの rsLoRA 実行は要求したスケールで学習し、結果が変わります。
 - **レイヤーストリーミングが DeepSeek-V3 系の MoE に対応しました。** Soup のレイヤーストリーミング
   （L2L の実装、Pudipeddi et al. 2020）は、`model_type: deepseek_v3` を、常駐とストリーミングで
-  フォワードとバックワードの一致（パリティ）を確認したうえでストリーミングします。この系統の公開形式で
-  ある FP8 ブロック量子化チェックポイントは、シャード時に逆量子化されます。Kimi-K2-Base と -Instruct の
-  設定は、フィールドごとの検査を通ったうえで受け入れられます（K2 形状の小さなチェックポイントが CPU 上で
-  ビット単位で一致してストリーミングされます。K2 そのものでは何も学習していません）。
+  フォワードとバックワードの一致（パリティ）を確認したうえでストリーミングし、FP8 ブロック量子化
+  チェックポイントをシャード時に逆量子化します。Kimi-K2-Base と -Instruct は、フィールドごとの検査を
+  通ったうえで受け入れられます（K2 形状の小さなチェックポイントが CPU 上でビット単位で一致して
+  ストリーミングされます。K2 そのものでは何も学習していません）。
   `training.stream_expert_layout: per_expert` は、ルーティングされたエキスパートを一つずつストリーミング
   します。RTX 5070 Laptop 8 GB 一台で、Moonlight-16B の LoRA は、fused の 3.1 GB に対して GPU メモリの
   ピークが 1.0 GB で、ステップ時間は約 2.7x でした（[記録](benchmarks/probe-rtx5070-moonlight-16b.md)）。
-  オプトイン方式（`stream_layers: true`）で、BETA です。
+  `training.stream_recompute: off` / `auto` は、ストリーミングされるレイヤーのアクティベーションを
+  再計算せずに保持し、勾配はビット単位で一致します。同じカードの RAM 階層では、Mistral-7B NF4 の
+  ステップが 512 トークンで 22%、2048 で 8.5% 速くなります
+  （[記録](benchmarks/gate-stream-recompute.md)）。オプトイン方式（`stream_layers: true`）で、BETA です。
 - **検証できる来歴（provenance）。** `soup registry push --data <file>` は学習ファイルの SHA-256 を
   記録し、`--idempotency-key` によりプッシュを安全に再試行できます。transformers バックエンドでは、常駐、
   レイヤーストリーミング、マルチ GPU の各実行が、読み込んだベースモデルの Hub コミットを記録します。
   `soup ship --require-provenance` は、エビデンスを、それに刻まれたアダプター・タスク・ソースのバイト列、
   スイートのバージョン、判定ポリシーと照合します。
-- **その他の新機能。** `soup --version`。GRPO が LLM ジャッジで採点できるようになりました
-  （`training.reward_fn: judge_rank`。プロンプトごとの補完のグループに対して、ジャッジの呼び出しは一回）。
-  そして [`docs/config-reference.md`](docs/config-reference.md) と
+- **その他の新機能。** `soup --version`。`soup data ingest` で PDF と DOCX を扱うための
+  `pip install "soup-cli[documents]"`。`soup merge --low-memory`。GRPO が LLM ジャッジで採点できる
+  ようになりました（`training.reward_fn: judge_rank`）。そして
+  [`docs/config-reference.md`](docs/config-reference.md) と
   [`docs/cli-reference.md`](docs/cli-reference.md) はコードから生成され、どちらかがコードの動作を正しく
   述べなくなると、テストスイートが失敗します。
 

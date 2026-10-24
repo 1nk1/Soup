@@ -99,36 +99,43 @@ soup train
 
 - **تغيير غير متوافق مع الإصدارات السابقة: تُرفَض الحقول المرحلية (staged) والقيم المُهمَلة.** ومن الحقول
   `training.lr_groups` و`early_stop_patience` و`forgetting_eval_steps` و`checkpoint_eval_*`
-  و`quantize_ref_model` و`long_context_grpo` و`vision_grpo`، ثم `data.split_thinking` ومفاتيح
-  `data.video_*`. واثنان منها، `training.rl_checkpoint_include_ref_model`
-  و`rl_checkpoint_include_rollout_buffer`، أُدرجا بعد v0.76.0، فلم يحذّر منهما أي إصدار قبل ذلك. أما القيم
-  فهي: `data.remove_unused_columns: true`، و`training.quantization: 4bit` / `8bit` (أو
-  `load_in_8bit: true`) في مهمة لا تُكمِّم النموذج أبدًا، و`soup ab --beta` الذي صار يخرج برمز 2.
-- **تغيير غير متوافق مع الإصدارات السابقة: Python 3.11–3.13، ولا تصدير بصيغتي AWQ أو GPTQ.** لم يعد
-  Python 3.10 مدعومًا (انتهى عمر دعمه في 2026-10-01)، وصار 3.13 يُختبَر في CI؛ وعلى 3.10 يواصل pip اختيار
-  v0.76.x. وأُزيل `soup export --format awq` / `gptq` و`soup quantize --to awq` / `gptq` بعد إصدار واحد
-  من الإيقاف التدريجي، لأن كلا المشروعين الأصليين مؤرشف: استخدم `gguf` أو `onnx` أو `tensorrt` أو `bitnet`
-  أو `tq1_0`، أو ابقَ على v0.76.x.
-- **يعمل DPO وORPO وSimPO أصليًا على Apple Silicon.** يتدرّب `task: dpo` و`orpo` و`simpo` مع
+  و`quantize_ref_model` و`long_context_grpo` و`vision_grpo` و`data.split_thinking` ومفاتيح
+  `data.video_*`. وقد أُدرج `training.rl_checkpoint_include_ref_model`
+  و`rl_checkpoint_include_rollout_buffer` بعد v0.76.0، فلم يحذّر منهما أي إصدار قبل ذلك. أما القيم فهي:
+  `data.remove_unused_columns: true`، و`training.quantization: 4bit` / `8bit` (أو
+  `load_in_8bit: true`) في مهمة لا تُكمِّم النموذج أبدًا، و`soup ab --beta`.
+- **تغيير غير متوافق مع الإصدارات السابقة: Python 3.11–3.13، ولا تصدير بصيغتي AWQ أو GPTQ، ورمز مصادقة
+  لمسارين في `soup serve`.** لم يعد Python 3.10 مدعومًا (انتهى عمر دعمه في 2026-10-01)؛ وعلى 3.10 يواصل
+  pip اختيار v0.76.x. وأُزيل `soup export --format awq` / `gptq` و`soup quantize --to awq` / `gptq`، لأن
+  كلا المشروعين الأصليين مؤرشف: استخدم `gguf` أو `onnx` أو `tensorrt` أو `bitnet` أو `tq1_0`، أو ابقَ على
+  v0.76.x. ويجيب `/v1/tools/python` و`/v1/tools/bash` بالرمز 401 ما لم يُشغَّل الخادم مع
+  <span dir="ltr">`--tool-auth-token`</span> (أو `SOUP_TOOL_AUTH_TOKEN`)، على أي عنوان ربط، ويجيب
+  `/v1/tools/python` بالرمز 501 حيث لا يوفّر المضيف عزلًا على مستوى نظام التشغيل، كما يفعل bash من قبل.
+- **يعمل DPO وORPO وSimPO وKTO أصليًا على Apple Silicon.** يتدرّب `task: dpo` و`orpo` و`simpo` و`kto` مع
   `backend: mlx` عبر حلقة MLX الخاصة بـ Soup وفق أهداف TRL (ORPO وSimPO دون نموذج مرجعي). ويكتسب SFT
-  النصي على MLX دعم DoRA الأصلي و`training.eval_steps` ومراقب الخسارة (loss watchdog). وصار
-  `lora.use_rslora` يُطبَّق على MLX وUnsloth، فيتدرّب تشغيل rsLoRA هناك بالمقياس الذي طلبه، وتتغيّر نتائجه.
+  النصي على MLX دعم DoRA الأصلي و`training.eval_steps` و`training.seed` ومراقب الخسارة (loss watchdog).
+  وصار `lora.use_rslora` يُطبَّق على MLX وUnsloth، فيتدرّب تشغيل rsLoRA هناك بالمقياس الذي طلبه، وتتغيّر
+  نتائجه.
 - **بثّ الطبقات يصل إلى نماذج MoE من عائلة DeepSeek-V3.** صار بثّ الطبقات في Soup (وهو تطبيق لـ L2L،
   Pudipeddi et al. 2020) يبثّ `model_type: deepseek_v3` مع تطابق بين النموذج المقيم والمبثوث في
-  التمريرتين الأمامية والخلفية، ويُزال تكميم نقاط الحفظ (checkpoints) المكمَّمة بالكتل بصيغة FP8، وهي
-  الصيغة التي تُنشر بها هذه العائلة، وقت التقسيم (shard). وتُقبَل إعدادات Kimi-K2-Base و-Instruct بعد فحص
-  حقلًا بحقل (تُبَثّ نقطة حفظ صغيرة بشكل K2 مطابقةً بتًّا ببت على CPU؛ ولم يُدرَّب أي شيء على K2 نفسه).
-  ويبثّ `training.stream_expert_layout: per_expert` خبيرًا موجَّهًا واحدًا في كل مرة: على جهاز
+  التمريرتين الأمامية والخلفية، ويُزيل تكميم نقاط الحفظ (checkpoints) المكمَّمة بالكتل بصيغة FP8 وقت
+  التقسيم (shard). ويُقبَل Kimi-K2-Base و-Instruct بعد فحص حقلًا بحقل (تُبَثّ نقطة حفظ صغيرة بشكل K2
+  مطابقةً بتًّا ببت على CPU؛ ولم يُدرَّب أي شيء على K2 نفسه). ويبثّ
+  `training.stream_expert_layout: per_expert` خبيرًا موجَّهًا واحدًا في كل مرة: على جهاز
   RTX 5070 Laptop واحد سعة 8 GB، بلغت ذروة ذاكرة GPU لتدريب LoRA على Moonlight-16B مقدار 1.0 GB مقابل
   3.1 GB في التخطيط المدمج (fused)، بزمن خطوة أطول بنحو 2.7x
-  ([السجل](benchmarks/probe-rtx5070-moonlight-16b.md)). لا يُفعَّل إلا بطلب صريح (`stream_layers: true`)، BETA.
+  ([السجل](benchmarks/probe-rtx5070-moonlight-16b.md)). ويحتفظ `training.stream_recompute: off` /
+  `auto` بتنشيطات الطبقات المبثوثة بدل إعادة حسابها، مع تدرّجات مطابقة بتًّا ببت: على طبقة RAM في البطاقة
+  نفسها تصير خطوة Mistral-7B NF4 أسرع بنسبة 22% عند 512 رمزًا و8.5% عند 2048
+  ([السجل](benchmarks/gate-stream-recompute.md)). لا يُفعَّل إلا بطلب صريح (`stream_layers: true`)، BETA.
 - **مصدر (provenance) يمكنك التحقق منه.** يسجّل `soup registry push --data <file>` بصمة SHA-256 لملف
   التدريب، ويجعل <span dir="ltr">`--idempotency-key`</span> إعادة محاولة الدفع آمنة؛ وعلى الواجهة الخلفية
   transformers تسجّل التشغيلات المقيمة والمبثوثة الطبقات والمتعددة وحدات GPU الـ commit على Hub للنموذج
   الأساسي الذي حمّلته؛ ويقارن `soup ship --require-provenance` الدليلَ بما خُتم به من بايتات المهايئ
   والمهمة والمصدر، وإصدار الحزمة (suite)، وسياسة الحكم.
-- **وجديد أيضًا.** `soup --version`؛ ويمكن لـ GRPO أن يقيّم بحَكَم من نموذج لغوي كبير (LLM judge)
-  (`training.reward_fn: judge_rank`، استدعاء واحد للحَكَم لكل مجموعة إكمالات لموجِّه واحد)؛ وصارت
+- **وجديد أيضًا.** `soup --version`؛ و`pip install "soup-cli[documents]"` لملفات PDF وDOCX في
+  `soup data ingest`؛ و<span dir="ltr">`soup merge --low-memory`</span>؛ ويمكن لـ GRPO أن يقيّم بحَكَم من
+  نموذج لغوي كبير (`training.reward_fn: judge_rank`)؛ وصارت
   [`docs/config-reference.md`](docs/config-reference.md) و[`docs/cli-reference.md`](docs/cli-reference.md)
   تُولَّد من الشيفرة، وتفشل مجموعة الاختبارات حين تكفّ إحداهما عن ذكر ما تفعله الشيفرة فعلًا.
 
