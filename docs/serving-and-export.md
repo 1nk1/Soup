@@ -910,7 +910,7 @@ closed allowlist / filtered-env rules as the other `soup llama` subcommands). Us
 it when you already have a GGUF and want llama.cpp's quantizer directly, rather
 than going through `soup export --format gguf` / `soup quantize`.
 
-Closed allowlist: `cli` / `mtmd-cli` / `gguf-split` / `server` / `quantize`. Forwards to `llama-*` binary on PATH (`shutil.which`) with **filtered child env** — `HF_TOKEN` / `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` and other secrets are dropped before exec; only `PATH` / `HOME` / `USER` / locale + llama.cpp-recognised `LLAMA_CPP_HOME` / `GGML_*` / `OMP_NUM_THREADS` are forwarded.
+Closed allowlist: `cli` / `mtmd-cli` / `gguf-split` / `server` / `quantize`. Forwards to the `llama-*` binary found in an absolute `PATH` directory (empty and relative entries and the current directory are not searched) with a **filtered child env** — `HF_TOKEN` / `OPENAI_API_KEY` / `ANTHROPIC_API_KEY` and other secrets are dropped before exec; only `PATH` / `PATHEXT` / `SYSTEMROOT` / `NoDefaultCurrentDirectoryInExePath`, `HOME` / `USER` / `USERPROFILE` / `TMP` / `TEMP`, locale (`LANG` / `LC_ALL` / `LC_CTYPE`), `TERM` / `COLORTERM` and the llama.cpp-recognised `LLAMA_CPP_HOME` / `GGML_CUDA` / `GGML_METAL` / `OMP_NUM_THREADS` are forwarded. Names are matched without regard to case on Windows.
 
 
 ## Tail-Latency Stats + Tool-Call Timer
@@ -1052,7 +1052,7 @@ Three POST routes are now available on `soup serve`:
   sub-process. Bounded by 512 MB memory, 5-second wall-clock timeout, and a
   cap of four concurrent runs (shared with the code-execution rewards). Like `/v1/tools/bash`, it runs the code only under
   OS-level isolation: on Linux with Python 3.12+ when `os.unshare` creates new user,
-  network and PID namespaces for the run, and on macOS when `sandbox-exec` is on `PATH`.
+  network and PID namespaces for the run, and on macOS when `/usr/bin/sandbox-exec` exists.
   Anywhere else it answers HTTP 501 without running the code, including on Windows, on
   Linux with Python 3.11, and on a Linux host or container that refuses those namespaces.
   This is not a filesystem sandbox: the code runs as the server's user, with the network
