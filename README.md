@@ -125,7 +125,7 @@ silently, can stop loading on v0.77: run `soup doctor --config soup.yaml` first.
   checkpoint streams bit for bit on CPU; nothing has been trained on K2 itself).
   `training.stream_expert_layout: per_expert` streams one routed expert at a time: on one RTX
   5070 Laptop 8 GB, the same Moonlight-16B LoRA config peaked at 1.0 GB of GPU memory against
-  3.1 GB fused (NF4 experts against bf16), at about 2.7x the step time
+  3.1 GB fused (NF4 experts against bf16, different cache tiers), at about 2.7x the step time
   ([record](benchmarks/probe-rtx5070-moonlight-16b.md)). `training.stream_recompute: off` /
   `auto` keeps streamed activations instead of recomputing them, with bit-identical gradients:
   on the same card's RAM tier a Mistral-7B NF4 step is 22% faster at 512 tokens and 8.5% at 2048

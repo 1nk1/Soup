@@ -34,9 +34,14 @@ Before the first run of an existing config on 0.77.0, run `soup doctor --config 
   Unsloth vision or audio SFT (#2015); `training.stream_layers` with `use_cut_ce` (#2023);
   vision row formats (`llava`, `sharegpt4v`) on preference tasks (#2064);
   `training.lora.rank_pattern` / `alpha_pattern` with `backend: mlx` (#1996) or `backend: unsloth`
-  (#2153); under `stream_layers`, a LoRA target on the streamed embedding or head, refused when the
-  model is built (#2082); and KTO rows whose label is not a boolean, `true`/`false`-style string or
-  -1, 0, 1 (#2126).
+  (#2153); and KTO rows whose label is not a boolean, `true`/`false`-style string or -1, 0, 1
+  (#2126).
+- **A LoRA target on a streamed embedding or head is refused when the model is built.** Under
+  `training.stream_layers`, v0.76 checked only the literal names `lm_head` and `embed_tokens` at
+  load, so a regex or dotted spelling loaded (a regex then failed at its first save, or in peft
+  under `task: dpo`). On an untied checkpoint any spelling is now refused before a streaming buffer
+  is allocated; on a tied checkpoint, where v0.76 refused the literal names too, it now trains and
+  saves (#2082).
 - **Python 3.11-3.13.** `requires-python` is `>=3.11,<3.14`; pip on Python 3.10 keeps installing
   0.76.x (#1805, in #2089).
 - **AWQ and GPTQ export are removed:** `soup export --format awq` / `gptq`,
@@ -206,8 +211,8 @@ Before the first run of an existing config on 0.77.0, run `soup doctor --config 
   at a time from `soup train`** (default `fused`). The layer buffers then hold only the dense part, so
   the VRAM bound no longer grows with the expert count. In `soup train` on an 8 GB laptop card,
   the same Moonlight-16B LoRA config peaked at 1.0 GB of GPU memory against 3.1 GB fused (NF4
-  experts against bf16), at about 2.7x the step time (`benchmarks/probe-rtx5070-moonlight-16b.md`).
-  Other architectures are refused at setup, `moe_lora` is refused with it, the VRAM pre-flight
+  experts against bf16, different cache tiers), at about 2.7x the step time
+  (`benchmarks/probe-rtx5070-moonlight-16b.md`). Other architectures are refused at setup, `moe_lora` is refused with it, the VRAM pre-flight
   charges the expert in flight, and a cache volume that is not NVMe is warned about. (#2029)
 
 - **Layer streaming shards a DeepSeek-V3 FP8 block-quantised checkpoint by dequantising it**

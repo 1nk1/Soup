@@ -123,7 +123,7 @@ NF4 达到 **952 MHz 下 119.6 tok/s，峰值 3.32 GB**（修复前）——与�
   （一个 K2 形状的小 checkpoint 在 CPU 上逐位一致地流式运行；没有在 K2 本身上训练过任何东西）。
   `training.stream_expert_layout: per_expert` 一次只流式加载一个被路由到的专家：在一台
   RTX 5070 Laptop 8 GB 上，同一份 Moonlight-16B LoRA 配置的 GPU 显存峰值为 1.0 GB（NF4 专家），而 fused
-  布局为 3.1 GB（bf16 专家），每步耗时约为 2.7x（[记录](benchmarks/probe-rtx5070-moonlight-16b.md)）。
+  布局为 3.1 GB（bf16 专家），两次运行的缓存层级也不同；每步耗时约为 2.7x（[记录](benchmarks/probe-rtx5070-moonlight-16b.md)）。
   `training.stream_recompute: off` / `auto` 会保留流式层的激活而不重新计算，梯度逐位一致：在同一张卡的
   RAM 层级上，Mistral-7B NF4 的一步在 512 个 token 时快 22%，在 2048 时快 8.5%
   （[记录](benchmarks/gate-stream-recompute.md)）。需显式开启（`stream_layers: true`），BETA。

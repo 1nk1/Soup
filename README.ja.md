@@ -128,7 +128,7 @@ v0.77 では読み込めなくなることがあります。まず `soup doctor 
   ストリーミングされます。K2 そのものでは何も学習していません）。
   `training.stream_expert_layout: per_expert` は、ルーティングされたエキスパートを一つずつストリーミング
   します。RTX 5070 Laptop 8 GB 一台で、同じ Moonlight-16B の LoRA 設定は、fused の 3.1 GB に対して
-  GPU メモリのピークが 1.0 GB（エキスパートは bf16 に対して NF4）で、ステップ時間は約 2.7x でした
+  GPU メモリのピークが 1.0 GB（エキスパートは bf16 に対して NF4、キャッシュ階層も異なる）で、ステップ時間は約 2.7x でした
   （[記録](benchmarks/probe-rtx5070-moonlight-16b.md)）。`training.stream_recompute: off` / `auto` は、
   ストリーミングされるレイヤーのアクティベーションを再計算せずに保持し、勾配はビット単位で一致します。
   同じカードの RAM 階層では、Mistral-7B NF4 のステップが 512 トークンで 22%、2048 で 8.5% 速くなります

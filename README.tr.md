@@ -131,7 +131,7 @@ yapılandırma v0.77'de yüklenmeyebilir: önce `soup doctor --config soup.yaml`
   kendisi üzerinde hiçbir şey eğitilmedi). `training.stream_expert_layout: per_expert` her seferinde
   tek bir yönlendirilmiş uzmanı akıtıyor: tek bir RTX 5070 Laptop 8 GB üzerinde aynı Moonlight-16B
   LoRA yapılandırması, birleşik (fused) düzendeki 3.1 GB'a karşı 1.0 GB GPU belleğiyle zirve yaptı
-  (bf16 uzmanlara karşı NF4 uzmanlar); adım süresi yaklaşık 2.7x
+  (bf16 uzmanlara karşı NF4 uzmanlar, farklı önbellek katmanları); adım süresi yaklaşık 2.7x
   ([kayıt](benchmarks/probe-rtx5070-moonlight-16b.md)). `training.stream_recompute: off` / `auto`,
   akışlı katmanların aktivasyonlarını yeniden hesaplamak yerine saklıyor ve gradyanlar bit bit aynı
   kalıyor: aynı kartın RAM katmanında bir Mistral-7B NF4 adımı 512 token'da %22, 2048'de %8.5 daha hızlı
