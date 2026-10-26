@@ -376,7 +376,8 @@ Before the first run of an existing config on 0.77.0, run `soup doctor --config 
     `image_resize_algorithm`, `split_thinking`, `eval_on_each_dataset`, `resize_vocab`,
     `extend_conversation`, `skip_prepare_dataset`. **What to do:** delete each named line. None of
     them changed what a run did, so removing them changes no result. For regression gating and
-    early stopping, use `soup train --gate <suite.yaml>`.
+    early stopping, use `soup train --gate <suite.yaml>`. A `soup sweep --param` that sets one of
+    them in any arm is refused the same way: the command exits `1` before the first arm starts.
   - **`data.remove_unused_columns: true` (#759).** No trainer ever read it. `soup autopilot` and
     run-config dumps from v0.75 and earlier wrote it into every config, so such files now stop at
     load. **What to do:** delete the line (or set it to `false`).

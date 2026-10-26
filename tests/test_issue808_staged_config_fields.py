@@ -597,3 +597,89 @@ class TestTheRefusalComesBeforeTheFieldsOwnValidator:
             ": Value error, training.grace_codebook=true requires BOTH "
             "training.grace_codebook_size and training.grace_codebook_dim."
         )
+
+
+# ---------------------------------------------------------------------------
+# soup sweep --param applies values after the load (#808)
+# ---------------------------------------------------------------------------
+
+
+def _sweep_refusal(paths: str) -> str:
+    return (
+        f"sweep parameter sets a field that is accepted but read by nothing: {paths}; "
+        f"refused as of v{STAGED_FIELD_REJECTION_VERSION}. Remove it from --param."
+    )
+
+
+class TestASweepParameterCannotSetAStagedField:
+    """``soup sweep`` applies each ``--param`` to a ``model_dump()`` of the loaded
+    config and builds ``SoupConfig`` from it directly, so a staged field set there
+    skipped the loader's refusal."""
+
+    def _swept(self, **params: object) -> dict:
+        """A config dict as ``_run_single`` builds it: dump plus the --param values."""
+        from soup_cli.commands.sweep import _set_nested_param
+        from soup_cli.config.schema import SoupConfig
+
+        config_dict = SoupConfig(**_raw()).model_dump()
+        for key, value in params.items():
+            _set_nested_param(config_dict, key, value)
+        return config_dict
+
+    def test_a_staged_field_away_from_its_default_is_refused(self) -> None:
+        from soup_cli.commands.sweep import _reject_staged_sweep_params
+
+        with pytest.raises(ValueError) as excinfo:
+            _reject_staged_sweep_params(
+                self._swept(**{"training.early_stop_patience": 5, "data.split_thinking": True})
+            )
+        assert str(excinfo.value) == _sweep_refusal(
+            "training.early_stop_patience, data.split_thinking"
+        )
+
+    def test_its_default_and_a_real_field_are_not_refused(self) -> None:
+        """The control: a guard that refused every sweep would pass the test above."""
+        from soup_cli.commands.sweep import _reject_staged_sweep_params
+
+        _reject_staged_sweep_params(self._swept(**{"training.early_stop_patience": 2}))
+        _reject_staged_sweep_params(self._swept(**{"training.lr": 1e-5}))
+
+    def test_under_warn_nothing_is_refused(self, monkeypatch) -> None:
+        from soup_cli.commands.sweep import _reject_staged_sweep_params
+
+        monkeypatch.setattr(loader, "STAGED_FIELD_SEVERITY", "warn")
+        _reject_staged_sweep_params(self._swept(**{"training.early_stop_patience": 5}))
+
+    def test_run_single_refuses_before_it_builds_the_config(self) -> None:
+        from soup_cli.commands.sweep import _run_single
+        from soup_cli.config.schema import SoupConfig
+
+        with pytest.raises(ValueError) as excinfo:
+            _run_single(
+                SoupConfig(**_raw()),
+                {"training.early_stop_patience": 5},
+                "sweep_1",
+                Path("soup.yaml"),
+            )
+        assert str(excinfo.value) == _sweep_refusal("training.early_stop_patience")
+
+    def test_the_command_exits_1_when_only_a_later_arm_sets_it(self, tmp_path) -> None:
+        """The first combination holds the default, so a probe of ``combinations[0]``
+        alone would let the grid start; the second arm would then fail inside the
+        arm loop, which records it and exits 0."""
+        from typer.testing import CliRunner
+
+        from soup_cli.cli import app
+
+        cfg = tmp_path / "soup.yaml"
+        cfg.write_text("base: test-model\ndata:\n  train: ./data.jsonl\n", encoding="utf-8")
+        result = CliRunner().invoke(app, [
+            "sweep",
+            "--config", str(cfg),
+            "--param", "training.early_stop_patience=2,5",
+            "--yes",
+        ])
+        out = _plain(result.output)
+        assert result.exit_code == 1, (result.output, repr(result.exception))
+        assert _sweep_refusal("training.early_stop_patience") in out, out
+        assert "--- Run 1/2" not in out, out
