@@ -31,7 +31,9 @@ Before the first run of an existing config on 0.77.0, run `soup doctor --config 
   OS-level isolation, as `POST /v1/tools/bash` already did (#2166). Both routes now require
   `--tool-auth-token` (or `SOUP_TOOL_AUTH_TOKEN`) on every bind, loopback included, and answer
   401 without it: start the server with the token and send `Authorization: Bearer <token>` with
-  each request (#2174). The other routes are unchanged.
+  each request (#2174). The other routes are unchanged. The isolation cuts the network; the code
+  still runs as the server's user, so use a long random token and see
+  `docs/serving-and-export.md` for running the server for callers you do not fully trust.
 - **`training.gradient_checkpointing` now reaches the trainer.** With the default `false`,
   `grpo`, `ipo`, `bco`, `reward_model` and `online_dpo` train with checkpointing off (TRL's own
   default used to apply), and `false` now turns Unsloth's checkpointing off; set `true` to keep
