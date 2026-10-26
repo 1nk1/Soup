@@ -12,7 +12,7 @@ reproducing 70+ versions of notes.
 
 ## [Unreleased]
 
-## [0.77.0] - 2026-10-25
+## [0.77.0] - 2026-10-26
 
 ### Upgrade notes
 
@@ -7638,7 +7638,9 @@ what a fine-tune forgets and leaks.
   `SECURITY.md` (~220 KB). `SECURITY.md` is now a concise security policy; the
   detailed hardening notes remain in git history and the GitHub Releases notes.
 
-[Unreleased]: https://github.com/MakazhanAlpamys/Soup/compare/v0.76.0...HEAD
+[Unreleased]: https://github.com/MakazhanAlpamys/Soup/compare/v0.77.0...HEAD
+[0.77.0]: https://github.com/MakazhanAlpamys/Soup/compare/v0.76.0...v0.77.0
+[0.76.1]: https://github.com/MakazhanAlpamys/Soup/compare/v0.76.0...v0.76.1
 [0.76.0]: https://github.com/MakazhanAlpamys/Soup/compare/v0.75.2...v0.76.0
 [0.75.2]: https://github.com/MakazhanAlpamys/Soup/compare/v0.75.1...v0.75.2
 [0.75.1]: https://github.com/MakazhanAlpamys/Soup/compare/v0.75.0...v0.75.1
