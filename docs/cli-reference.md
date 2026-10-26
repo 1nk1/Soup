@@ -1695,7 +1695,7 @@ Usage: `soup deploy autopilot [OPTIONS]`
 | `--list`, `-l` | flag | off |  | List all known deploy profiles. |
 | `--measure` | flag | off |  | Run Quant-Lobotomy measurement on candidate quants. Requires --tasks. Results cached at \~/.soup/deploy_autopilot_cache.json (v0.53.1 #109). |
 | `--tasks` | text |  |  | JSONL eval tasks for --measure (one prompt + expected per line). |
-| `--measure-candidates` | text |  |  | Comma-separated quant candidates to measure (default: profile's primary quant). Example: 4bit,gptq,awq |
+| `--measure-candidates` | text |  |  | Comma-separated quant candidates to measure (default: profile's primary quant). Example: 4bit,8bit,fp8 |
 
 ### `soup deploy hf-space`
 
