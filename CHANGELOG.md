@@ -143,8 +143,8 @@ Before the first run of an existing config on 0.77.0, run `soup doctor --config 
   MTP layers stored past `num_hidden_layers`, and keeps the router's `e_score_correction_bias` at
   fp32; the runtime loads that buffer from the shard (the streamed skeleton would otherwise run it
   at zero). FP8 checkpoints (`F8_*` tensors or `*_scale_inv` block scales) are refused by the
-  sharder instead of being cast without their scales. Kimi K2's `kimi_k2` model type stays refused.
-  (#1914)
+  sharder instead of being cast without their scales. Kimi K2's `kimi_k2` model type stayed
+  refused in this change; #2107 (below) admits Kimi-K2-Base and Kimi-K2-Instruct. (#1914)
 
 - A claim board, the pinned issue #1945 regenerated daily by `scripts/claim_board.py`, shows which `help wanted` issues are free, claimed or blocked (#1917)
 
@@ -212,7 +212,9 @@ Before the first run of an existing config on 0.77.0, run `soup doctor --config 
   (per-tensor scales, e5m2, compressed-tensors, ue8m0 scales, static activation scales, an
   out-of-range `weight_block_size`, a missing or misshapen scale, an FP8 tensor without a scale,
   a scale without its tensor), damaged values (a NaN byte, a negative or non-finite scale, a
-  float16 overflow) and an FP8 base that is not `model_type: deepseek_v3`. Kimi K2 (`model_type: kimi_k2`) is still refused by name. (#2061)
+  float16 overflow) and an FP8 base that is not `model_type: deepseek_v3`. Kimi K2
+  (`model_type: kimi_k2`) was still refused by name in this change; #2107 (below) admits
+  Kimi-K2-Base and Kimi-K2-Instruct. (#2061)
 
 - **ORPO runs natively on Apple Silicon: `task: orpo` with `backend: mlx` (#2004 by @dryn85-max
   in #2073).** It was refused at config load. Soup's own MLX loop now trains TRL 0.29.1's ORPO
