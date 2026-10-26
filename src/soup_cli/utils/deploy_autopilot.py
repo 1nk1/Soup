@@ -121,7 +121,7 @@ _BUILTIN: Mapping[str, DeployProfile] = MappingProxyType(
         ),
         "rtx-4090-24gb": _make(
             # Was "AWQ + vLLM" with quant awq: Soup no longer produces AWQ
-            # (export removed in v0.77.0, #1951), so the recipe trains QLoRA.
+            # (the AWQ export and extra are gone, #1951), so the recipe trains QLoRA.
             "rtx-4090-24gb", "Consumer NVIDIA 24GB — 4bit QLoRA + vLLM",
             "vllm", "4bit", "qlora", True, 8192,
             "Soup does not produce AWQ; to serve a pre-quantized AWQ checkpoint, "
