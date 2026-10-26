@@ -1068,6 +1068,9 @@ Listed by first contribution. PR numbers link the work.
 - **Daivik Awasthi** ([@daivikawasthi01](https://github.com/daivikawasthi01))
   - First contribution. Made `tests/test_errors.py` pass with colour forced on by reading the console through `strip_ansi` ([#2173](https://github.com/MakazhanAlpamys/Soup/issues/2173), [#2176](https://github.com/MakazhanAlpamys/Soup/pull/2176))
 
+- **Saurav Mukherjee** ([@SauravMukherjee44](https://github.com/SauravMukherjee44))
+  - First contribution. Pinned that `atomic_write_text`, `atomic_write_lines` and `atomic_write_bytes` in `utils/paths.py` stage their temporary file in the destination's directory, which keeps the final `os.replace` on one filesystem: one test over the three writers wraps the real `tempfile.mkstemp` and asserts one call with the destination's parent as `dir` plus the written bytes; removing `dir=parent` from any one writer fails only that writer's case ([#2178](https://github.com/MakazhanAlpamys/Soup/issues/2178), [#2179](https://github.com/MakazhanAlpamys/Soup/pull/2179))
+
 ---
 
 Want to join this list? See [CONTRIBUTING.md](CONTRIBUTING.md) — good first issues are
