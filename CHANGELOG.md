@@ -22,6 +22,21 @@ Before the first run of an existing config on 0.77.0, run `soup doctor --config 
   default, `data.remove_unused_columns: true`, `training.quantization` / `load_in_8bit` on a task
   that never quantises, and `soup ab --beta` stop the load or the command; each refusal names the
   line to delete. The first entry under Changed lists them (#808).
+- **Settings v0.76 accepted silently and never applied are refused too.** Each refusal names the
+  setting and the fix; the entries under Fixed give the details:
+  `training.use_mod: true` on a route without a Mixture-of-Depths router (#1752);
+  a non-default `training.moe_aux_loss_coeff` on `backend: unsloth` or with `stream_layers` (#1749);
+  `training.expand_layers` with a LoRA rank (#1783) or on `task: pretrain`, and `task: pretrain`
+  with `lora.r: 0` (#1875); `training.citation_faithful` on `pretrain` (#1843);
+  `training.neftune_alpha` on the 14 tasks that never forward it (#1883);
+  `training.relora_steps` where the loss has a frozen reference (#1891);
+  `quantization: 8bit` with `backend: unsloth` (#1946); vision or audio distillation (#2014) and
+  Unsloth vision or audio SFT (#2015); `training.stream_layers` with `use_cut_ce` (#2023);
+  vision row formats (`llava`, `sharegpt4v`) on preference tasks (#2064);
+  `training.lora.rank_pattern` / `alpha_pattern` with `backend: mlx` (#1996) or `backend: unsloth`
+  (#2153); under `stream_layers`, a LoRA target on the streamed embedding or head, refused when the
+  model is built (#2082); and KTO rows whose label is not a boolean, `true`/`false`-style string or
+  -1, 0, 1 (#2126).
 - **Python 3.11-3.13.** `requires-python` is `>=3.11,<3.14`; pip on Python 3.10 keeps installing
   0.76.x (#1805, in #2089).
 - **AWQ and GPTQ export are removed:** `soup export --format awq` / `gptq`,

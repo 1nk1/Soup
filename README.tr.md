@@ -95,7 +95,7 @@ yerine altyapıyla boğuşarak geçiriyor. Soup bunu çözer.
 
 **v0.77.0 — v0.76'nın uyardığı şeyler artık reddediliyor.** Hiçbir şeyin okumadığı 31 yapılandırma
 alanı ve kullanımdan kaldırılmış üç değer artık bir uyarıyla yüklenmiyor: yükleme, her ayar için o ayarı
-adlandıran ve neyin silineceğini söyleyen bir satırla duruyor. v0.76'da uyarılarla yüklenen bir
+adlandıran ve neyin silineceğini söyleyen bir satırla duruyor. v0.76'da uyarılarla ya da sessizce yüklenen bir
 yapılandırma v0.77'de yüklenmeyebilir: önce `soup doctor --config soup.yaml` komutunu çalıştırın.
 
 - **Geriye dönük uyumsuz değişiklik: bekletilen (staged) alanlar ve kullanımdan kaldırılmış değerler
@@ -105,6 +105,10 @@ yapılandırma v0.77'de yüklenmeyebilir: önce `soup doctor --config soup.yaml`
   `rl_checkpoint_include_rollout_buffer` v0.76.0'dan sonra bekletmeye alındı; bu yüzden hiçbir sürüm
   önce onlar hakkında uyarmadı. Değerler: `data.remove_unused_columns: true`, hiç niceleme yapmayan bir
   görevde `training.quantization: 4bit` / `8bit` (veya `load_in_8bit: true`) ve `soup ab --beta`.
+  v0.76'nın hiçbir şey söylemeden yok saydığı yaklaşık on iki ayar da artık reddediliyor; örneğin hiçbir
+  şeyin uygulamadığı yerlerde `use_mod` veya `neftune_alpha`, LoRA rank'ı ile `expand_layers`, Unsloth'ta
+  `8bit` veya görsel SFT ve MLX ya da Unsloth'ta `lora.rank_pattern`: CHANGELOG'daki yükseltme notlarına
+  bakın.
 - **Geriye dönük uyumsuz değişiklik: Python 3.11–3.13, AWQ ve GPTQ dışa aktarımı yok, iki `soup serve`
   rotası için belirteç.** Python 3.10 artık desteklenmiyor (destek süresi 2026-10-01'de sona erdi);
   3.10'da pip v0.76.x'i seçmeye devam ediyor. `soup export --format awq` / `gptq` ve

@@ -92,7 +92,7 @@ NF4 达到 **952 MHz 下 119.6 tok/s，峰值 3.32 GB**（修复前）——与�
 ## 最新动态
 
 **v0.77.0——v0.76 警告过的内容，现在会被拒绝。** 31 个没有任何代码读取的配置字段，以及三个已弃用的
-取值，不再带着警告加载：加载会中止，每个设置一行，指出它的名字并说明该删除什么。在 v0.76 上带警告
+取值，不再带着警告加载：加载会中止，每个设置一行，指出它的名字并说明该删除什么。在 v0.76 上带警告或静默
 加载的配置，在 v0.77 上可能无法加载：请先运行 `soup doctor --config soup.yaml`。
 
 - **破坏性变更：暂存（staged）字段和已弃用的取值会被拒绝。** 其中的字段包括 `training.lr_groups`、
@@ -102,6 +102,9 @@ NF4 达到 **952 MHz 下 119.6 tok/s，峰值 3.32 GB**（修复前）——与�
   之后才被暂存的，因此此前没有任何版本对它们发出过警告。取值包括：`data.remove_unused_columns: true`、
   在从不量化的任务上设置 `training.quantization: 4bit` / `8bit`（或 `load_in_8bit: true`），以及
   `soup ab --beta`。
+  v0.76 不声不响地忽略的十来个设置也会被拒绝，例如在没有任何代码应用它们的地方设置的 `use_mod` 或
+  `neftune_alpha`、带 LoRA 秩的 `expand_layers`、Unsloth 上的 `8bit` 或视觉 SFT，以及 MLX 或 Unsloth 上的
+  `lora.rank_pattern`：详见 CHANGELOG 中的升级说明。
 - **破坏性变更：Python 3.11–3.13，不再支持 AWQ 和 GPTQ 导出，`soup serve` 的两个路由需要令牌。** 不再
   支持 Python 3.10（已于 2026-10-01 结束生命周期）；在 3.10 上，pip 会继续解析到 v0.76.x。
   `soup export --format awq` / `gptq` 和 `soup quantize --to awq` / `gptq` 已被移除，因为两个上游项目

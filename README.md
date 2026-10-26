@@ -93,8 +93,8 @@ infrastructure instead of improving models. Soup fixes that.
 
 **v0.77.0 — what v0.76 warned about is now refused.** 31 config fields that nothing reads, and
 three deprecated values, no longer load with a warning: the load stops with one line per setting
-that names it and says what to delete. A config that loaded with warnings on v0.76 can stop
-loading on v0.77: run `soup doctor --config soup.yaml` first.
+that names it and says what to delete. A config that loaded on v0.76, with warnings or
+silently, can stop loading on v0.77: run `soup doctor --config soup.yaml` first.
 
 - **Breaking: staged fields and deprecated values are refused.** Among the fields:
   `training.lr_groups`, `early_stop_patience`, `forgetting_eval_steps`, `checkpoint_eval_*`,
@@ -103,6 +103,9 @@ loading on v0.77: run `soup doctor --config soup.yaml` first.
   `rl_checkpoint_include_rollout_buffer` were staged after v0.76.0, so no release warned about
   them first. The values: `data.remove_unused_columns: true`, `training.quantization: 4bit` /
   `8bit` (or `load_in_8bit: true`) on a task that never quantises, and `soup ab --beta`.
+  About a dozen settings v0.76 ignored without a word are refused too, such as `use_mod` or
+  `neftune_alpha` where nothing applies them, `expand_layers` with a LoRA rank, `8bit` or vision
+  SFT on Unsloth, and `lora.rank_pattern` on MLX or Unsloth: see the CHANGELOG upgrade notes.
 - **Breaking: Python 3.11–3.13, no AWQ or GPTQ export, a token for two `soup serve` routes.**
   Python 3.10 is no longer supported (end of life 2026-10-01); on 3.10, pip keeps resolving
   v0.76.x. `soup export --format awq` / `gptq` and `soup quantize --to awq` / `gptq` are removed,
