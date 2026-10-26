@@ -135,9 +135,9 @@ def _wait_for_ssh(api_key, pod_id):
 def _find_tool(name):
     """The absolute path of the program ``name`` found on PATH, or None.
 
-    Only absolute PATH entries are searched, in order, and the current directory
-    is never searched (on Windows the program search would otherwise look there
-    first). On Windows each PATHEXT extension is tried.
+    Tools run by an absolute path found on PATH: absolute PATH entries are tried
+    in order, empty and relative entries are skipped, and on Windows each PATHEXT
+    extension is tried.
     """
     if os.name == "nt":
         suffixes = [
@@ -164,8 +164,9 @@ def _tool(name):
 
 
 def _tool_environment():
-    """The environment for ssh and scp: the controller's, without the RunPod API key,
-    which they do not use; on Windows the program search skips the current directory."""
+    """The environment for ssh and scp: the controller's without RUNPOD_API_KEY, plus
+    NoDefaultCurrentDirectoryInExePath=1 on Windows. Tools run by an absolute path
+    found on PATH (see ``_find_tool``)."""
     env = {name: value for name, value in os.environ.items() if name.upper() != "RUNPOD_API_KEY"}
     if os.name == "nt":
         env["NoDefaultCurrentDirectoryInExePath"] = "1"
@@ -240,24 +241,40 @@ def _run_ssh_session(ip: str, port: int, private_key: str, known_hosts: pathlib.
     # The copy goes into a directory created for it, and only the one expected
     # entry is then moved to the output path.
     staging = pathlib.Path(tempfile.mkdtemp(prefix=".soup-runpod-copy-", dir=str(target.parent)))
-    copied = subprocess.run(
-        [
-            scp,
-            *common,
-            "-P",
-            str(port),
-            "-r",
-            "--",
-            f"root@{ip}:/workspace/soup/{_OUTPUT}",
-            str(staging),
-        ],
-        capture_output=True,
-        timeout=900,
-        env=env,
-    )
+    try:
+        copied = subprocess.run(
+            [
+                scp,
+                *common,
+                "-P",
+                str(port),
+                "-r",
+                "--",
+                f"root@{ip}:/workspace/soup/{_OUTPUT}",
+                str(staging),
+            ],
+            capture_output=True,
+            timeout=900,
+            env=env,
+        )
+    except subprocess.TimeoutExpired:
+        raise _ControllerError(_failed_copy("RunPod artifact copy timed out", staging)) from None
     if copied.returncode != 0:
-        raise _ControllerError("RunPod artifact copy failed")
+        raise _ControllerError(_failed_copy("RunPod artifact copy failed", staging))
     _move_copied_output(staging, target)
+
+
+def _failed_copy(reason, staging):
+    """``reason`` for a copy that did not finish. The copy directory ``staging``
+    (and nothing else) is removed when the copy left it empty; otherwise it is kept
+    and the returned text names it."""
+    try:
+        os.rmdir(staging)
+    except FileNotFoundError:
+        pass
+    except OSError:
+        return f"{reason}; the copy directory is left in place: {staging}"
+    return reason
 
 
 def _move_copied_output(staging, target):

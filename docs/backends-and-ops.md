@@ -593,7 +593,9 @@ refused before allocation and rechecked before copying. SCP separates options fr
 its operands with `--` and writes into a new, empty directory created next to the
 output path for the copy; only the expected output directory, holding directories
 and regular files only, is then moved to the output path. Anything else stops the
-move and leaves that directory in place for inspection. `ssh` and `scp` run by the
+move and leaves that directory in place for inspection. A failed or timed-out copy
+removes that directory when nothing was written to it; otherwise the failure notice
+names it, with the partial copy inside. `ssh` and `scp` run by the
 absolute path found in an absolute `PATH` entry (the current directory and relative
 entries are not searched), with the controller's environment minus `RUNPOD_API_KEY`.
 Submission starts Python in isolated mode (`-I`) and passes

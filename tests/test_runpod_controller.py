@@ -262,6 +262,114 @@ class TestResultsAreFetchedIntoADedicatedDirectory:
         )
         assert not (tmp_path / "out").exists()
 
+    def test_a_directory_junction_inside_moves_nothing(self, credentials, tmp_path, monkeypatch):
+        # A Windows directory junction reads as a directory whose attributes carry
+        # FILE_ATTRIBUTE_REPARSE_POINT (0x400); the attribute is set by hand here so
+        # the check runs on every OS.
+        ns = _controller()
+        staging = self._staging(tmp_path)
+        junction = os.path.normcase(os.path.abspath(staging / "out" / "adapter"))
+        real_lstat = os.lstat
+
+        def lstat(path, *args, **kwargs):
+            info = real_lstat(path, *args, **kwargs)
+            if os.path.normcase(os.path.abspath(path)) == junction:
+                return types.SimpleNamespace(st_mode=info.st_mode, st_file_attributes=0x400)
+            return info
+
+        monkeypatch.setattr(ns["os"], "lstat", lstat)
+        with pytest.raises(RuntimeError) as excinfo:
+            ns["_move_copied_output"](staging, Path("out"))
+        assert str(excinfo.value) == (
+            "RunPod artifact copy held a link or special file; nothing was moved to the "
+            "output path"
+        )
+        assert not (tmp_path / "out").exists()
+        assert (staging / "out" / "adapter" / "weights.bin").read_bytes() == b"w"
+
+    @staticmethod
+    def _failing_copy(ns, monkeypatch, how, write):
+        """scp fails (``how`` = "exit") or times out (``how`` = "timeout") after
+        ``write`` ran on the directory it was given; returns that directory."""
+        destinations = []
+
+        def run(argv, **kwargs):
+            if argv[0] == FAKE_TOOL_DIR + "scp":
+                destinations.append(Path(argv[-1]))
+                write(Path(argv[-1]))
+                if how == "timeout":
+                    raise subprocess.TimeoutExpired(argv, kwargs["timeout"])
+                return subprocess.CompletedProcess(argv, 1)
+            return subprocess.CompletedProcess(argv, 0)
+
+        monkeypatch.setattr(ns["subprocess"], "run", run)
+        return destinations
+
+    _REASONS = {"exit": "RunPod artifact copy failed", "timeout": "RunPod artifact copy timed out"}
+
+    @pytest.mark.parametrize("how", ["exit", "timeout"])
+    def test_a_failed_copy_that_wrote_nothing_removes_its_directory(
+        self, credentials, tmp_path, monkeypatch, how
+    ):
+        ns = _controller()
+        destinations = self._failing_copy(ns, monkeypatch, how, lambda directory: None)
+        with pytest.raises(RuntimeError) as excinfo:
+            ns["_train_and_copy"]("192.0.2.1", 2222, str(credentials))
+        assert str(excinfo.value) == self._REASONS[how]
+        assert len(destinations) == 1
+        assert not destinations[0].exists()
+        assert sorted(path.name for path in tmp_path.iterdir()) == ["id_test", "id_test.pub"]
+
+    @pytest.mark.parametrize("how", ["exit", "timeout"])
+    def test_a_failed_copy_that_wrote_a_part_keeps_it_and_names_its_directory(
+        self, credentials, tmp_path, monkeypatch, how
+    ):
+        def write(directory):
+            (directory / "out").mkdir()
+            (directory / "out" / "part.bin").write_bytes(b"p")
+
+        ns = _controller()
+        destinations = self._failing_copy(ns, monkeypatch, how, write)
+        with pytest.raises(RuntimeError) as excinfo:
+            ns["_train_and_copy"]("192.0.2.1", 2222, str(credentials))
+        staging = destinations[0]
+        assert str(excinfo.value) == (
+            f"{self._REASONS[how]}; the copy directory is left in place: {staging}"
+        )
+        assert (staging / "out" / "part.bin").read_bytes() == b"p"
+        assert not (tmp_path / "out").exists()
+
+    def test_a_failed_copy_whose_directory_is_gone_names_no_directory(
+        self, credentials, monkeypatch
+    ):
+        ns = _controller()
+        self._failing_copy(ns, monkeypatch, "exit", os.rmdir)
+        with pytest.raises(RuntimeError) as excinfo:
+            ns["_train_and_copy"]("192.0.2.1", 2222, str(credentials))
+        assert str(excinfo.value) == "RunPod artifact copy failed"
+
+    def test_a_timed_out_copy_is_reported_by_name_and_the_pod_is_deleted(
+        self, credentials, monkeypatch
+    ):
+        ns = _controller()
+        notices, deletes = [], []
+
+        def request(*args, method="GET", **kwargs):
+            if method == "POST":
+                return {"id": "pod-1"}
+            if method == "DELETE":
+                deletes.append(args[1])
+            return None
+
+        ns["_request_json"] = request
+        ns["_wait_for_ssh"] = lambda *args: ("8.8.8.8", 2222)
+        ns["_notice"] = notices.append
+        self._failing_copy(ns, monkeypatch, "timeout", lambda directory: None)
+        assert ns["main"]() == 1
+        assert "RunPod artifact copy timed out" in notices
+        assert deletes == ["/pods/pod-1"]
+        assert "RunPod termination verified." in notices
+
     def test_scp_writes_into_a_fresh_directory_not_the_working_directory(
         self, credentials, tmp_path, monkeypatch
     ):
