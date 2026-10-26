@@ -103,7 +103,7 @@ silently, can stop loading on v0.77: run `soup doctor --config soup.yaml` first.
   `rl_checkpoint_include_rollout_buffer` were staged after v0.76.0, so no release warned about
   them first. The values: `data.remove_unused_columns: true`, `training.quantization: 4bit` /
   `8bit` (or `load_in_8bit: true`) on a task that never quantises, and `soup ab --beta`.
-  About a dozen settings v0.76 ignored without a word are refused too, such as `use_mod` or
+  Fifteen settings v0.76 ignored without a word are refused too, such as `use_mod` or
   `neftune_alpha` where nothing applies them, `expand_layers` with a LoRA rank, `8bit` or vision
   SFT on Unsloth, and `lora.rank_pattern` on MLX or Unsloth: see the CHANGELOG upgrade notes.
 - **Breaking: Python 3.11–3.13, no AWQ or GPTQ export, a token for two `soup serve` routes.**
@@ -124,12 +124,12 @@ silently, can stop loading on v0.77: run `soup doctor --config soup.yaml` first.
   Kimi-K2-Base and -Instruct are admitted behind a field-by-field check (a tiny K2-shaped
   checkpoint streams bit for bit on CPU; nothing has been trained on K2 itself).
   `training.stream_expert_layout: per_expert` streams one routed expert at a time: on one RTX
-  5070 Laptop 8 GB, Moonlight-16B LoRA peaked at 1.0 GB of GPU memory against 3.1 GB fused, at
-  about 2.7x the step time ([record](benchmarks/probe-rtx5070-moonlight-16b.md)).
-  `training.stream_recompute: off` / `auto` keeps streamed activations instead of recomputing
-  them, with bit-identical gradients: on the same card's RAM tier a Mistral-7B NF4 step is 22%
-  faster at 512 tokens and 8.5% at 2048 ([record](benchmarks/gate-stream-recompute.md)).
-  Opt-in (`stream_layers: true`), BETA.
+  5070 Laptop 8 GB, the same Moonlight-16B LoRA config peaked at 1.0 GB of GPU memory against
+  3.1 GB fused (NF4 experts against bf16), at about 2.7x the step time
+  ([record](benchmarks/probe-rtx5070-moonlight-16b.md)). `training.stream_recompute: off` /
+  `auto` keeps streamed activations instead of recomputing them, with bit-identical gradients:
+  on the same card's RAM tier a Mistral-7B NF4 step is 22% faster at 512 tokens and 8.5% at 2048
+  ([record](benchmarks/gate-stream-recompute.md)). Opt-in (`stream_layers: true`), BETA.
 - **Provenance you can check.** `soup registry push --data <file>` records the training file's
   SHA-256, and `--idempotency-key` makes a push safe to retry; on the transformers backend,
   resident, layer-streamed and multi-GPU runs record the Hub commit of the base they loaded;

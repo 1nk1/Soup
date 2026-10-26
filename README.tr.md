@@ -105,7 +105,7 @@ yapılandırma v0.77'de yüklenmeyebilir: önce `soup doctor --config soup.yaml`
   `rl_checkpoint_include_rollout_buffer` v0.76.0'dan sonra bekletmeye alındı; bu yüzden hiçbir sürüm
   önce onlar hakkında uyarmadı. Değerler: `data.remove_unused_columns: true`, hiç niceleme yapmayan bir
   görevde `training.quantization: 4bit` / `8bit` (veya `load_in_8bit: true`) ve `soup ab --beta`.
-  v0.76'nın hiçbir şey söylemeden yok saydığı yaklaşık on iki ayar da artık reddediliyor; örneğin hiçbir
+  v0.76'nın hiçbir şey söylemeden yok saydığı on beş ayar da artık reddediliyor; örneğin hiçbir
   şeyin uygulamadığı yerlerde `use_mod` veya `neftune_alpha`, LoRA rank'ı ile `expand_layers`, Unsloth'ta
   `8bit` veya görsel SFT ve MLX ya da Unsloth'ta `lora.rank_pattern`: CHANGELOG'daki yükseltme notlarına
   bakın.
@@ -129,13 +129,13 @@ yapılandırma v0.77'de yüklenmeyebilir: önce `soup doctor --config soup.yaml`
   parçalama (shard) sırasında nicelemeden çözüyor. Kimi-K2-Base ve -Instruct alan alan bir denetimden
   geçerek kabul ediliyor (K2 biçimindeki küçük bir checkpoint CPU'da bit bit aynı sonuçla akıyor; K2'nin
   kendisi üzerinde hiçbir şey eğitilmedi). `training.stream_expert_layout: per_expert` her seferinde
-  tek bir yönlendirilmiş uzmanı akıtıyor: tek bir RTX 5070 Laptop 8 GB üzerinde Moonlight-16B LoRA,
-  birleşik (fused) düzendeki 3.1 GB'a karşı 1.0 GB GPU belleğiyle zirve yaptı; adım süresi yaklaşık
-  2.7x ([kayıt](benchmarks/probe-rtx5070-moonlight-16b.md)). `training.stream_recompute: off` /
-  `auto`, akışlı katmanların aktivasyonlarını yeniden hesaplamak yerine saklıyor ve gradyanlar bit bit
-  aynı kalıyor: aynı kartın RAM katmanında bir Mistral-7B NF4 adımı 512 token'da %22, 2048'de %8.5
-  daha hızlı ([kayıt](benchmarks/gate-stream-recompute.md)). İsteğe bağlıdır (`stream_layers: true`),
-  BETA.
+  tek bir yönlendirilmiş uzmanı akıtıyor: tek bir RTX 5070 Laptop 8 GB üzerinde aynı Moonlight-16B
+  LoRA yapılandırması, birleşik (fused) düzendeki 3.1 GB'a karşı 1.0 GB GPU belleğiyle zirve yaptı
+  (bf16 uzmanlara karşı NF4 uzmanlar); adım süresi yaklaşık 2.7x
+  ([kayıt](benchmarks/probe-rtx5070-moonlight-16b.md)). `training.stream_recompute: off` / `auto`,
+  akışlı katmanların aktivasyonlarını yeniden hesaplamak yerine saklıyor ve gradyanlar bit bit aynı
+  kalıyor: aynı kartın RAM katmanında bir Mistral-7B NF4 adımı 512 token'da %22, 2048'de %8.5 daha hızlı
+  ([kayıt](benchmarks/gate-stream-recompute.md)). İsteğe bağlıdır (`stream_layers: true`), BETA.
 - **Doğrulanabilir köken (provenance).** `soup registry push --data <file>` eğitim dosyasının SHA-256
   özetini kaydediyor ve `--idempotency-key` bir gönderimi yeniden denemeye güvenli hâle getiriyor;
   transformers arka ucunda yerleşik, katman akışlı ve çoklu GPU çalıştırmaları, yükledikleri temel

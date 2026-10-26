@@ -205,10 +205,10 @@ Before the first run of an existing config on 0.77.0, run `soup doctor --config 
 - **`training.stream_expert_layout: per_expert` streams a DeepSeek-V3-family MoE one routed expert
   at a time from `soup train`** (default `fused`). The layer buffers then hold only the dense part, so
   the VRAM bound no longer grows with the expert count. In `soup train` on an 8 GB laptop card,
-  Moonlight-16B LoRA peaked at 1.0 GB of GPU memory against 3.1 GB fused, at about 2.7x the step
-  time (`benchmarks/probe-rtx5070-moonlight-16b.md`). Other architectures are refused at setup,
-  `moe_lora` is refused with it, the VRAM pre-flight charges the expert in flight, and a cache volume
-  that is not NVMe is warned about. (#2029)
+  the same Moonlight-16B LoRA config peaked at 1.0 GB of GPU memory against 3.1 GB fused (NF4
+  experts against bf16), at about 2.7x the step time (`benchmarks/probe-rtx5070-moonlight-16b.md`).
+  Other architectures are refused at setup, `moe_lora` is refused with it, the VRAM pre-flight
+  charges the expert in flight, and a cache volume that is not NVMe is warned about. (#2029)
 
 - **Layer streaming shards a DeepSeek-V3 FP8 block-quantised checkpoint by dequantising it**
   (the format DeepSeek-V3 is published in: `float8_e4m3fn` weights with a float32

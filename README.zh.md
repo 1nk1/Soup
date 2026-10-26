@@ -102,7 +102,7 @@ NF4 达到 **952 MHz 下 119.6 tok/s，峰值 3.32 GB**（修复前）——与�
   之后才被暂存的，因此此前没有任何版本对它们发出过警告。取值包括：`data.remove_unused_columns: true`、
   在从不量化的任务上设置 `training.quantization: 4bit` / `8bit`（或 `load_in_8bit: true`），以及
   `soup ab --beta`。
-  v0.76 不声不响地忽略的十来个设置也会被拒绝，例如在没有任何代码应用它们的地方设置的 `use_mod` 或
+  v0.76 不声不响地忽略的十五个设置也会被拒绝，例如在没有任何代码应用它们的地方设置的 `use_mod` 或
   `neftune_alpha`、带 LoRA 秩的 `expand_layers`、Unsloth 上的 `8bit` 或视觉 SFT，以及 MLX 或 Unsloth 上的
   `lora.rank_pattern`：详见 CHANGELOG 中的升级说明。
 - **破坏性变更：Python 3.11–3.13，不再支持 AWQ 和 GPTQ 导出，`soup serve` 的两个路由需要令牌。** 不再
@@ -122,11 +122,11 @@ NF4 达到 **952 MHz 下 119.6 tok/s，峰值 3.32 GB**（修复前）——与�
   并在分片时把 FP8 分块量化的 checkpoint 反量化。Kimi-K2-Base 和 -Instruct 要先通过逐字段检查才会被接受
   （一个 K2 形状的小 checkpoint 在 CPU 上逐位一致地流式运行；没有在 K2 本身上训练过任何东西）。
   `training.stream_expert_layout: per_expert` 一次只流式加载一个被路由到的专家：在一台
-  RTX 5070 Laptop 8 GB 上，Moonlight-16B LoRA 的 GPU 显存峰值为 1.0 GB，而 fused 布局为 3.1 GB，每步耗时
-  约为 2.7x（[记录](benchmarks/probe-rtx5070-moonlight-16b.md)）。`training.stream_recompute: off` /
-  `auto` 会保留流式层的激活而不重新计算，梯度逐位一致：在同一张卡的 RAM 层级上，Mistral-7B NF4 的一步
-  在 512 个 token 时快 22%，在 2048 时快 8.5%（[记录](benchmarks/gate-stream-recompute.md)）。需显式开启
-  （`stream_layers: true`），BETA。
+  RTX 5070 Laptop 8 GB 上，同一份 Moonlight-16B LoRA 配置的 GPU 显存峰值为 1.0 GB（NF4 专家），而 fused
+  布局为 3.1 GB（bf16 专家），每步耗时约为 2.7x（[记录](benchmarks/probe-rtx5070-moonlight-16b.md)）。
+  `training.stream_recompute: off` / `auto` 会保留流式层的激活而不重新计算，梯度逐位一致：在同一张卡的
+  RAM 层级上，Mistral-7B NF4 的一步在 512 个 token 时快 22%，在 2048 时快 8.5%
+  （[记录](benchmarks/gate-stream-recompute.md)）。需显式开启（`stream_layers: true`），BETA。
 - **可核验的来源（provenance）。** `soup registry push --data <file>` 记录训练文件的 SHA-256，
   `--idempotency-key` 让推送可以安全重试；在 transformers 后端上，常驻、layer streaming 和多 GPU 运行都会
   记录它们所加载基座模型的 Hub commit；`soup ship --require-provenance` 会把证据与它盖章时记录的

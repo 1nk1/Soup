@@ -104,7 +104,7 @@ soup train
   و`rl_checkpoint_include_rollout_buffer` بعد v0.76.0، فلم يحذّر منهما أي إصدار قبل ذلك. أما القيم فهي:
   `data.remove_unused_columns: true`، و`training.quantization: 4bit` / `8bit` (أو
   `load_in_8bit: true`) في مهمة لا تُكمِّم النموذج أبدًا، و`soup ab --beta`.
-  وتُرفَض أيضًا نحو اثني عشر إعدادًا كان v0.76 يتجاهلها دون أي كلمة، مثل `use_mod` أو `neftune_alpha` حيث
+  وتُرفَض أيضًا خمسة عشر إعدادًا كان v0.76 يتجاهلها دون أي كلمة، مثل `use_mod` أو `neftune_alpha` حيث
   لا يطبّقهما شيء، و`expand_layers` مع رتبة LoRA، و`8bit` أو SFT للرؤية على Unsloth، و`lora.rank_pattern`
   على MLX أو Unsloth: راجع ملاحظات الترقية في CHANGELOG.
 - **تغيير غير متوافق مع الإصدارات السابقة: Python 3.11–3.13، ولا تصدير بصيغتي AWQ أو GPTQ، ورمز مصادقة
@@ -125,8 +125,8 @@ soup train
   التقسيم (shard). ويُقبَل Kimi-K2-Base و-Instruct بعد فحص حقلًا بحقل (تُبَثّ نقطة حفظ صغيرة بشكل K2
   مطابقةً بتًّا ببت على CPU؛ ولم يُدرَّب أي شيء على K2 نفسه). ويبثّ
   `training.stream_expert_layout: per_expert` خبيرًا موجَّهًا واحدًا في كل مرة: على جهاز
-  RTX 5070 Laptop واحد سعة 8 GB، بلغت ذروة ذاكرة GPU لتدريب LoRA على Moonlight-16B مقدار 1.0 GB مقابل
-  3.1 GB في التخطيط المدمج (fused)، بزمن خطوة أطول بنحو 2.7x
+  RTX 5070 Laptop واحد سعة 8 GB، بلغت ذروة ذاكرة GPU لتدريب LoRA على Moonlight-16B بالإعداد نفسه
+  مقدار 1.0 GB مقابل 3.1 GB في التخطيط المدمج (fused)، بخبراء NF4 مقابل bf16، بزمن خطوة أطول بنحو 2.7x
   ([السجل](benchmarks/probe-rtx5070-moonlight-16b.md)). ويحتفظ `training.stream_recompute: off` /
   `auto` بتنشيطات الطبقات المبثوثة بدل إعادة حسابها، مع تدرّجات مطابقة بتًّا ببت: على طبقة RAM في البطاقة
   نفسها تصير خطوة Mistral-7B NF4 أسرع بنسبة 22% عند 512 رمزًا و8.5% عند 2048

@@ -104,7 +104,7 @@ v0.77 では読み込めなくなることがあります。まず `soup doctor 
   `rl_checkpoint_include_rollout_buffer` は v0.76.0 より後にステージされたため、事前に警告した
   リリースはありません。値は、`data.remove_unused_columns: true`、量子化を一切行わないタスクでの
   `training.quantization: 4bit` / `8bit`（または `load_in_8bit: true`）、そして `soup ab --beta` です。
-  v0.76 が何も言わずに無視していた十数個の設定も拒否されます。たとえば何も適用しない場所での `use_mod` や
+  v0.76 が何も言わずに無視していた十五個の設定も拒否されます。たとえば何も適用しない場所での `use_mod` や
   `neftune_alpha`、LoRA ランク付きの `expand_layers`、Unsloth での `8bit` やビジョン SFT、MLX または
   Unsloth での `lora.rank_pattern` です。CHANGELOG のアップグレードノートを参照してください。
 - **破壊的変更: Python 3.11–3.13、AWQ と GPTQ のエクスポートは廃止、`soup serve` の二つのルートに
@@ -127,11 +127,11 @@ v0.77 では読み込めなくなることがあります。まず `soup doctor 
   通ったうえで受け入れられます（K2 形状の小さなチェックポイントが CPU 上でビット単位で一致して
   ストリーミングされます。K2 そのものでは何も学習していません）。
   `training.stream_expert_layout: per_expert` は、ルーティングされたエキスパートを一つずつストリーミング
-  します。RTX 5070 Laptop 8 GB 一台で、Moonlight-16B の LoRA は、fused の 3.1 GB に対して GPU メモリの
-  ピークが 1.0 GB で、ステップ時間は約 2.7x でした（[記録](benchmarks/probe-rtx5070-moonlight-16b.md)）。
-  `training.stream_recompute: off` / `auto` は、ストリーミングされるレイヤーのアクティベーションを
-  再計算せずに保持し、勾配はビット単位で一致します。同じカードの RAM 階層では、Mistral-7B NF4 の
-  ステップが 512 トークンで 22%、2048 で 8.5% 速くなります
+  します。RTX 5070 Laptop 8 GB 一台で、同じ Moonlight-16B の LoRA 設定は、fused の 3.1 GB に対して
+  GPU メモリのピークが 1.0 GB（エキスパートは bf16 に対して NF4）で、ステップ時間は約 2.7x でした
+  （[記録](benchmarks/probe-rtx5070-moonlight-16b.md)）。`training.stream_recompute: off` / `auto` は、
+  ストリーミングされるレイヤーのアクティベーションを再計算せずに保持し、勾配はビット単位で一致します。
+  同じカードの RAM 階層では、Mistral-7B NF4 のステップが 512 トークンで 22%、2048 で 8.5% 速くなります
   （[記録](benchmarks/gate-stream-recompute.md)）。オプトイン方式（`stream_layers: true`）で、BETA です。
 - **検証できる来歴（provenance）。** `soup registry push --data <file>` は学習ファイルの SHA-256 を
   記録し、`--idempotency-key` によりプッシュを安全に再試行できます。transformers バックエンドでは、常駐、
