@@ -488,7 +488,7 @@ _OWN_VALIDATOR_CASES = {
 }
 
 _RUC_REFUSAL_LINE = (
-    "  data -> remove_unused_columns: data.remove_unused_columns: true never had an effect "
+    "  data.remove_unused_columns: true never had an effect "
     "(no trainer reads it; the trainers that set it pass false). Delete the line. "
     f"Refused as of Soup v{DEPRECATED_VALUE_REJECTION_VERSION}."
 )

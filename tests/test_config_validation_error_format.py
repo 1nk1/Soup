@@ -50,6 +50,18 @@ data:
 output: ./o
 """
 
+_GRPO_REMOTE_HTTP_JUDGE = """\
+base: org/model
+task: grpo
+data:
+  train: ./x.jsonl
+training:
+  reward_fn: judge_rank
+  grpo_judge: http://judge.example.com/m
+  grpo_judge_max_calls: 1000
+output: ./o
+"""
+
 _SFT_EPOCHS_NOT_A_NUMBER = """\
 base: org/model
 task: sft
@@ -110,16 +122,30 @@ class TestThroughSoupTrainDryRun:
         # It still names the fix.
         assert "Delete the line or set quantization: none." in out, out
 
-    def test_a_field_level_refusal_keeps_its_location(self, tmp_path, monkeypatch):
-        """The control: an entry with a location still reads ``<loc>: <message>``,
-        and loses the ``Value error, `` prefix there too."""
+    def test_a_field_level_deprecated_value_names_its_field_once(self, tmp_path, monkeypatch):
+        """A deprecated-value refusal starts with the field's dotted path (its text
+        was the v0.76 warning, which had no location), so ``<loc>: `` in front
+        named the field twice (v0.77.0 release smoke). It is the message alone."""
         result = _dry_run(tmp_path, monkeypatch, _SFT_REMOVE_UNUSED_COLUMNS)
         out = _plain(result.output)
 
         assert result.exit_code == 1, (result.output, repr(result.exception))
         assert (
-            "Config validation error: data -> remove_unused_columns: "
-            "data.remove_unused_columns: true never had an effect"
+            "Config validation error: data.remove_unused_columns: true never had an effect"
+        ) in out, out
+        assert "data -> remove_unused_columns" not in out, out
+        assert "Value error" not in out, out
+
+    def test_a_field_level_refusal_keeps_its_location(self, tmp_path, monkeypatch):
+        """The control: an entry whose message does not repeat the field still reads
+        ``<loc>: <message>``, and loses the ``Value error, `` prefix there too."""
+        result = _dry_run(tmp_path, monkeypatch, _GRPO_REMOTE_HTTP_JUDGE)
+        out = _plain(result.output)
+
+        assert result.exit_code == 1, (result.output, repr(result.exception))
+        assert (
+            "Config validation error: training -> grpo_judge: judge_model "
+            "'http://judge.example.com/m' uses unsupported scheme"
         ) in out, out
         assert "Value error" not in out, out
 
@@ -161,7 +187,22 @@ class TestThePrintedLines:
         assert printed.getvalue().splitlines() == [
             "Config validation error:",
             "",
-            f"  data -> remove_unused_columns: {_RUC_REFUSAL}",
+            f"  {_RUC_REFUSAL}",
+        ]
+
+    def test_field_level_with_a_location_the_message_does_not_repeat(self, printed, tmp_path):
+        path = tmp_path / "soup.yaml"
+        path.write_text(_GRPO_REMOTE_HTTP_JUDGE, encoding="utf-8")
+
+        with pytest.raises(SystemExit) as excinfo:
+            loader.load_config(path)
+
+        assert excinfo.value.code == 1
+        assert printed.getvalue().splitlines() == [
+            "Config validation error:",
+            "",
+            "  training -> grpo_judge: judge_model 'http://judge.example.com/m' uses "
+            "unsupported scheme",
         ]
 
 

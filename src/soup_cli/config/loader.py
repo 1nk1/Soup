@@ -8,7 +8,7 @@ import yaml
 from pydantic import ValidationError
 from rich.console import Console
 
-from soup_cli.config.deprecation import SoupConfigDeprecationWarning
+from soup_cli.config.deprecation import SoupConfigDeprecationWarning, deadline_clause
 from soup_cli.config.schema import SoupConfig
 from soup_cli.config.staged_fields import find_staged_config_fields, format_staged_fields
 from soup_cli.config.unknown_keys import find_unknown_config_keys, format_unknown_keys
@@ -179,10 +179,18 @@ def _print_validation_errors(errors: list) -> None:
     is changed; ``load_config_from_string`` keeps Pydantic's text in its
     ``ValueError``, which API callers read. Both parts can quote config keys or
     values from the file, so each goes through :func:`for_terminal`.
+
+    A deprecated-value refusal (#759) at field level is also the message alone:
+    its text is the v0.76 warning's, which had no location and so starts with
+    the field's dotted path, and ``<loc>: `` in front would name the field twice
+    (``data -> remove_unused_columns: data.remove_unused_columns: ...``).
     """
     for err in errors:
         loc = " -> ".join(str(part) for part in err["loc"])
         msg = err["msg"].removeprefix(_PYDANTIC_VALUE_ERROR_PREFIX)
+        dotted = ".".join(str(part) for part in err["loc"])
+        if loc and msg.startswith(f"{dotted}: ") and deadline_clause() in msg:
+            loc = ""
         if loc:
             console.print(f"  [red]{for_terminal(loc)}:[/] {for_terminal(msg)}", emoji=False)
         else:

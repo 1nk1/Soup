@@ -1666,11 +1666,10 @@ class TrainingConfig(BaseModel):
         from soup_cli.eval.gate import _parse_judge_url
         from soup_cli.eval.judge import validate_judge_api_base
 
-        try:
-            _provider, _model, api_base = _parse_judge_url(value)
-            validate_judge_api_base(api_base)
-        except ValueError as exc:
-            raise ValueError(f"grpo_judge: {exc}") from exc
+        # Their ValueError is reported as it is: Pydantic's location already
+        # names training.grpo_judge, so a "grpo_judge: " prefix named it twice.
+        _provider, _model, api_base = _parse_judge_url(value)
+        validate_judge_api_base(api_base)
         return value
 
     @field_validator("grpo_judge_rubric", mode="before")
@@ -7117,29 +7116,30 @@ class SoupConfig(BaseModel):
         tcfg = self.training
         if not tcfg.stream_layers:
             # Footgun: a non-default stream_* while streaming is off almost
-            # certainly means the user forgot stream_layers=true.
-            if (
-                tcfg.stream_source != "auto"
-                or tcfg.stream_ngram_source != "auto"
-                or tcfg.stream_buffers != 2
-                or tcfg.stream_read_ahead != DEFAULT_STREAM_READ_AHEAD
-                or tcfg.stream_vram_override is not None
-                or tcfg.stream_vram_probe
-                or tcfg.stream_nf4_scale_cache
-                or tcfg.stream_recompute != "on"
-                or tcfg.stream_expert_layout != "fused"
-                or tcfg.stream_disk_kind is not None
-                or tcfg.stream_pin is not None
-                or tcfg.stream_loss_chunk is not None
-            ):
+            # certainly means the user forgot stream_layers=true. Only the
+            # fields the config sets are named, not all twelve.
+            set_fields = [
+                name
+                for name, is_set in (
+                    ("stream_source", tcfg.stream_source != "auto"),
+                    ("stream_ngram_source", tcfg.stream_ngram_source != "auto"),
+                    ("stream_buffers", tcfg.stream_buffers != 2),
+                    ("stream_read_ahead", tcfg.stream_read_ahead != DEFAULT_STREAM_READ_AHEAD),
+                    ("stream_vram_override", tcfg.stream_vram_override is not None),
+                    ("stream_vram_probe", bool(tcfg.stream_vram_probe)),
+                    ("stream_nf4_scale_cache", bool(tcfg.stream_nf4_scale_cache)),
+                    ("stream_recompute", tcfg.stream_recompute != "on"),
+                    ("stream_expert_layout", tcfg.stream_expert_layout != "fused"),
+                    ("stream_disk_kind", tcfg.stream_disk_kind is not None),
+                    ("stream_pin", tcfg.stream_pin is not None),
+                    ("stream_loss_chunk", tcfg.stream_loss_chunk is not None),
+                )
+                if is_set
+            ]
+            if set_fields:
+                named = " / ".join(f"training.{name}" for name in set_fields)
                 raise ValueError(
-                    "training.stream_source / training.stream_ngram_source / "
-                    "training.stream_buffers / training.stream_read_ahead / "
-                    "training.stream_vram_override / training.stream_vram_probe "
-                    "/ training.stream_nf4_scale_cache / training.stream_recompute "
-                    "/ training.stream_expert_layout "
-                    "/ training.stream_disk_kind / training.stream_pin "
-                    "/ training.stream_loss_chunk set but stream_layers is false; set "
+                    f"{named} set but stream_layers is false; set "
                     "stream_layers=true to stream the base layer-by-layer."
                 )
             return self
@@ -7621,9 +7621,10 @@ class SoupConfig(BaseModel):
             set_fields = [name for name in GRPO_JUDGE_FIELDS if getattr(t, name) is not None]
             if set_fields:
                 named = ", ".join(f"training.{name}" for name in set_fields)
+                verb, pronoun = ("applies", "it") if len(set_fields) == 1 else ("apply", "them")
                 raise ValueError(
-                    f"{named} only apply to training.reward_fn judge_rank; got "
-                    f"reward_fn={t.reward_fn!r}. Add judge_rank to reward_fn or remove them."
+                    f"{named} only {verb} to training.reward_fn judge_rank; got "
+                    f"reward_fn={t.reward_fn!r}. Add judge_rank to reward_fn or remove {pronoun}."
                 )
             return self
         if self.task != "grpo":
