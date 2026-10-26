@@ -477,6 +477,8 @@ Before the first run of an existing config on 0.77.0, run `soup doctor --config 
 
 - `soup deploy autopilot --target rtx-4090-24gb` now plans 4bit QLoRA + vLLM: it wrote `quantization: awq` (load a pre-quantized AWQ base) for an ordinary base, a route Soup no longer sets up since the AWQ export and extra are gone (#1951). The profile's notes say to point vLLM at a pre-quantized AWQ checkpoint directly; the `--measure-candidates` examples now read `4bit,8bit,fp8`.
 
+- `soup ingest --logs` names a directory or a non-UTF-8 export ("is a directory, not an export file", "is not valid UTF-8 (byte N)") and exits `1`, instead of stopping on an uncaught `FileNotFoundError` / `UnicodeDecodeError`; an existing output is still left untouched (#2018 follow-up).
+
 ### Removed
 
 - **Removed deprecated `awq` and `gptq` export and quantize formats and extras (#1710 by @Nari-Ab in #1951; see #338, #1690).** Both upstream projects (`autoawq` and `auto-gptq`) are archived and incompatible with `[train]`. `soup export --format awq` / `--format gptq` and `soup quantize --to awq` / `--to gptq` are now refused at the CLI with non-zero exit codes naming the remaining supported formats (`gguf`, `onnx`, `tensorrt`, `bitnet`, `tq1_0`, `torchao`, `gguf-ud`). `soup export` also lost `--bits`, `--group-size`, and `--calibration-samples`, so scripts passing them now exit 2 with `No such option`; `--calibration-data` is now read only by `--format gguf-ud`. The `[awq]` and `[gptq]` extras and related export helpers are removed in v0.77; users who still need AWQ or GPTQ export should remain on 0.76.x.
