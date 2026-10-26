@@ -18,6 +18,7 @@ import pytest
 
 from soup_cli import __version__
 from soup_cli.config import loader
+from soup_cli.config.deprecation import DEPRECATED_VALUE_REJECTION_VERSION
 from soup_cli.config.staged_fields import (
     STAGED_FIELD_REJECTION_VERSION,
     STAGED_FIELDS,
@@ -438,7 +439,7 @@ class TestGroupBTunablesIntegration:
         assert "read by nothing" not in _plain(capsys.readouterr().out)
 
 
-_LATE_STAGED_RL_FLAGS =["rl_checkpoint_include_ref_model", "rl_checkpoint_include_rollout_buffer"]
+_LATE_STAGED_RL_FLAGS = ["rl_checkpoint_include_ref_model", "rl_checkpoint_include_rollout_buffer"]
 
 
 def _valid_with_training(**kwargs) -> str:
@@ -468,3 +469,131 @@ class TestTheLateStagedRlCheckpointFlags:
             f"training.{name} is accepted but read by nothing; "
             f"refused as of v{STAGED_FIELD_REJECTION_VERSION}. Delete the line."
         ) in str(excinfo.value)
+
+
+# ---------------------------------------------------------------------------
+# The staged refusal comes before a staged field's own validator (#808)
+# ---------------------------------------------------------------------------
+
+_SFT_ALPACA = (
+    "base: hf/model\ntask: sft\ndata:\n  train: ./t.jsonl\n  format: alpaca\n{data}"
+    "training:\n  epochs: 1\n{training}output: ./o\n"
+)
+
+#: refused field -> (data lines, training lines, the advice its own validator gave)
+_OWN_VALIDATOR_CASES = {
+    "training.grace_codebook": ("", "  grace_codebook: true\n", "requires BOTH"),
+    "training.long_context_grpo": ("", "  long_context_grpo: true\n", "requires task="),
+    "data.video_fps": ("  video_fps: 2.0\n", "", "require format in"),
+}
+
+_RUC_REFUSAL_LINE = (
+    "  data -> remove_unused_columns: data.remove_unused_columns: true never had an effect "
+    "(no trainer reads it; the trainers that set it pass false). Delete the line. "
+    f"Refused as of Soup v{DEPRECATED_VALUE_REJECTION_VERSION}."
+)
+
+
+def _staged_line(path: str) -> str:
+    return (
+        f"{path} is accepted but read by nothing; "
+        f"refused as of v{STAGED_FIELD_REJECTION_VERSION}. Delete the line."
+    )
+
+
+@pytest.fixture
+def printed(monkeypatch):
+    """What the loader prints, uncoloured and unwrapped."""
+    import io
+
+    from rich.console import Console
+
+    buffer = io.StringIO()
+    monkeypatch.setattr(
+        loader, "console", Console(file=buffer, width=500, force_terminal=False, color_system=None)
+    )
+    return buffer
+
+
+class TestTheRefusalComesBeforeTheFieldsOwnValidator:
+    """Some staged fields have a cross-validator of their own. When it failed, the
+    loader reported it alone: ``grace_codebook: true`` asked for
+    ``grace_codebook_size`` and ``grace_codebook_dim``, ``long_context_grpo: true``
+    for ``task: grpo``, ``video_fps`` for a video format -- and the next load
+    refused every line the user had just added. The staged refusal is now the first
+    line and the validator's advice is not given."""
+
+    @pytest.mark.parametrize("path", sorted(_OWN_VALIDATOR_CASES))
+    def test_the_string_load_gives_only_the_staged_line(self, path: str) -> None:
+        data, training, _advice = _OWN_VALIDATOR_CASES[path]
+        with pytest.raises(ValueError) as excinfo:
+            loader.load_config_from_string(_SFT_ALPACA.format(data=data, training=training))
+        assert str(excinfo.value) == _staged_line(path)
+
+    @pytest.mark.parametrize("path", sorted(_OWN_VALIDATOR_CASES))
+    def test_soup_train_prints_the_staged_line_and_not_the_advice(
+        self, path: str, tmp_path, monkeypatch
+    ) -> None:
+        from typer.testing import CliRunner
+
+        from soup_cli.cli import app
+
+        data, training, advice = _OWN_VALIDATOR_CASES[path]
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "soup.yaml").write_text(
+            _SFT_ALPACA.format(data=data, training=training), encoding="utf-8"
+        )
+        result = CliRunner().invoke(app, ["train", "--config", "soup.yaml", "--dry-run"])
+        out = _plain(result.output)
+        assert result.exit_code == 1, (result.output, repr(result.exception))
+        assert f"Config validation error: {_staged_line(path)}" in out, out
+        assert advice not in out, out
+
+    def test_a_value_refusal_follows_the_staged_line_in_the_same_report(
+        self, printed, tmp_path
+    ) -> None:
+        path = tmp_path / "soup.yaml"
+        path.write_text(
+            _SFT_ALPACA.format(
+                data="  remove_unused_columns: true\n", training="  grace_codebook: true\n"
+            ),
+            encoding="utf-8",
+        )
+        with pytest.raises(SystemExit) as excinfo:
+            loader.load_config(path)
+        assert excinfo.value.code == 1
+        assert printed.getvalue().splitlines() == [
+            "Config validation error:",
+            "",
+            f"  {_staged_line('training.grace_codebook')}",
+            _RUC_REFUSAL_LINE,
+        ]
+
+    def test_the_string_load_puts_an_unrelated_error_on_the_next_line(self) -> None:
+        with pytest.raises(ValueError) as excinfo:
+            loader.load_config_from_string(
+                _SFT_ALPACA.format(data="", training="  lr: -1\n  early_stop_patience: 5\n")
+            )
+        assert str(excinfo.value) == (
+            _staged_line("training.early_stop_patience")
+            + "\ntraining -> lr: Input should be greater than 0"
+        )
+
+    def test_a_longer_field_name_is_not_taken_for_the_refused_one(self) -> None:
+        names = ("grace_codebook",)
+        assert loader._names_a_field({"loc": ("training", "grace_codebook"), "msg": "x"}, names)
+        assert loader._names_a_field({"loc": (), "msg": "training.grace_codebook=true"}, names)
+        assert not loader._names_a_field(
+            {"loc": ("training", "grace_codebook_size"), "msg": "grace_codebook_size: 0"}, names
+        )
+
+    def test_under_warn_the_validator_is_reported_as_before(self, monkeypatch) -> None:
+        monkeypatch.setattr(loader, "STAGED_FIELD_SEVERITY", "warn")
+        with pytest.raises(ValueError) as excinfo:
+            loader.load_config_from_string(
+                _SFT_ALPACA.format(data="", training="  grace_codebook: true\n")
+            )
+        assert str(excinfo.value) == (
+            ": Value error, training.grace_codebook=true requires BOTH "
+            "training.grace_codebook_size and training.grace_codebook_dim."
+        )

@@ -1,5 +1,6 @@
 """Load and validate soup.yaml configs."""
 
+import re
 import warnings
 from pathlib import Path
 
@@ -101,6 +102,47 @@ def _report_staged_fields(
     return None
 
 
+def _names_a_field(err: dict, names: "tuple[str, ...]") -> bool:
+    """Whether a Pydantic error entry is about one of ``names``: one is a part of
+    its location, or its message names one as a whole word."""
+    if any(part in names for part in err["loc"]):
+        return True
+    return any(
+        re.search(rf"(?<![A-Za-z0-9_]){re.escape(name)}(?![A-Za-z0-9_])", err["msg"])
+        for name in names
+    )
+
+
+def _staged_refusal_after_failed_build(
+    raw: dict, exc: ValidationError
+) -> "tuple[str, list] | None":
+    """The staged-field refusal for a config that did not build, and the build
+    errors that are left to report after it (#808).
+
+    Some staged fields have a cross-validator of their own: ``grace_codebook``
+    asks for ``grace_codebook_size`` and ``grace_codebook_dim``,
+    ``long_context_grpo`` for ``task: grpo``, ``video_fps`` for a video format.
+    Reported alone, that message is advice the next load refuses: the user adds
+    what it asks for, and the staged check then refuses all of it. So when the
+    build fails and the mapping sets a staged field, the staged refusal is
+    reported first, followed only by the build errors that name none of the
+    refused fields. The mapping is read without a built config (the
+    ``config=None`` path of :func:`find_staged_config_fields`), which can only
+    run here, on a load that has already failed.
+
+    Returns ``None`` (report the build errors as they are) under ``"warn"`` or
+    when no staged field is set.
+    """
+    if STAGED_FIELD_SEVERITY != "error":
+        return None
+    staged = find_staged_config_fields(raw)
+    if not staged:
+        return None
+    names = tuple(item.name for item in staged)
+    remaining = [err for err in exc.errors() if not _names_a_field(err, names)]
+    return format_staged_fields(staged, include_deadline=False), remaining
+
+
 #: Longest piece of text taken from the file that a refusal quotes.
 _MAX_DETAIL_CHARS = 200
 
@@ -124,8 +166,11 @@ def _print_refusal_lines(message: str) -> None:
 _PYDANTIC_VALUE_ERROR_PREFIX = "Value error, "
 
 
-def _print_validation_errors(exc: ValidationError) -> None:
+def _print_validation_errors(errors: list) -> None:
     """Print each entry of a ``ValidationError`` under ``Config validation error:``.
+
+    ``errors`` is ``ValidationError.errors()``, or the part of it that is left
+    after a staged-field refusal (:func:`_staged_refusal_after_failed_build`).
 
     A field-level entry reads ``<loc>: <message>``. A model-level one (a
     ``model_validator`` refusal) has an empty ``loc`` and is the message alone,
@@ -135,7 +180,7 @@ def _print_validation_errors(exc: ValidationError) -> None:
     ``ValueError``, which API callers read. Both parts can quote config keys or
     values from the file, so each goes through :func:`for_terminal`.
     """
-    for err in exc.errors():
+    for err in errors:
         loc = " -> ".join(str(part) for part in err["loc"])
         msg = err["msg"].removeprefix(_PYDANTIC_VALUE_ERROR_PREFIX)
         if loc:
@@ -272,7 +317,13 @@ def load_config(
         config = _build_config(raw)
     except ValidationError as e:
         console.print("[red bold]Config validation error:[/]\n")
-        _print_validation_errors(e)
+        staged_first = _staged_refusal_after_failed_build(raw, e)
+        if staged_first is None:
+            _print_validation_errors(e.errors())
+        else:
+            staged_error, remaining = staged_first
+            _print_refusal_lines(staged_error)
+            _print_validation_errors(remaining)
         raise SystemExit(1)
 
     staged_error = _report_staged_fields(raw, config=config)
@@ -313,11 +364,20 @@ def load_config_from_string(yaml_str: str, *, max_bytes: "int | None" = None) ->
     try:
         config = _build_config(raw)
     except ValidationError as exc:
+        staged_first = _staged_refusal_after_failed_build(raw, exc)
+        entries = exc.errors() if staged_first is None else staged_first[1]
         errors = []
-        for err in exc.errors():
+        for err in entries:
             loc = " -> ".join(str(part) for part in err["loc"])
             errors.append(f"{loc}: {err['msg']}")
-        raise ValueError("; ".join(errors))
+        if staged_first is None:
+            raise ValueError("; ".join(errors))
+        # The staged lines first, one per field as on a load that builds; the
+        # build errors that are left follow on one more line.
+        lines = [staged_first[0]]
+        if errors:
+            lines.append("; ".join(errors))
+        raise ValueError("\n".join(lines))
 
     staged_error = _report_staged_fields(raw, config=config)
     if staged_error is not None:

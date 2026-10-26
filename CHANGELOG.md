@@ -354,8 +354,12 @@ Before the first run of an existing config on 0.77.0, run `soup doctor --config 
   `DEPRECATED_VALUE_SEVERITY`) to `"error"` in the release commit. A config that sets one of the
   items below no longer loads: `soup train` exits `1` with `Config validation error:` and one
   indented line per refused setting, `soup doctor --config` exits `2` with the same lines, and
-  `load_config_from_string` (API / UI) raises `ValueError` with the same text. A config that sets
-  both kinds shows the value refusals first and the staged-field lines once those are fixed.
+  `load_config_from_string` (API / UI) raises `ValueError` with the same refusals (a value refusal
+  keeps Pydantic's `Value error, ` prefix there). A config that sets both kinds gets both in one
+  report, the staged-field lines first. When a staged field's own check fails as well (for example
+  `grace_codebook: true` without a size and a dimension, `long_context_grpo: true` on `sft`, or
+  `video_fps` with a non-video format), only the staged line is shown, so no message asks for a
+  line that the next load refuses.
   Nothing else changes, and a config that leaves these items unset, or writes them at their
   defaults, loads as before.
 

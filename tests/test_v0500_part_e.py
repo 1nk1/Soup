@@ -16,16 +16,23 @@ from soup_cli.utils.prm import (
 )
 
 
-def _staged_but_schema_valid(text: str, path: str) -> SoupConfig:
-    """``text`` built through the schema, which still accepts the staged field ``path``,
-    after checking that the loader refuses it (#808, refused as of v0.77)."""
+def _loader_refuses_as_staged(text: str, path: str) -> dict:
+    """The loader refuses the staged field ``path`` in ``text`` with its one line and
+    nothing else, before the field's own validator (#808, refused as of v0.77).
+    Returns the mapping, for a check of the schema itself."""
     with pytest.raises(ValueError) as excinfo:
         load_config_from_string(text)
     assert str(excinfo.value) == (
         f"{path} is accepted but read by nothing; "
         f"refused as of v{STAGED_FIELD_REJECTION_VERSION}. Delete the line."
     )
-    return SoupConfig(**safe_load(text))
+    return safe_load(text)
+
+
+def _staged_but_schema_valid(text: str, path: str) -> SoupConfig:
+    """``text`` built through the schema, which still accepts the staged field ``path``,
+    after checking that the loader refuses it (#808, refused as of v0.77)."""
+    return SoupConfig(**_loader_refuses_as_staged(text, path))
 
 
 # ---------------------------------------------------------------------------
@@ -289,8 +296,9 @@ training:
   reward_fn: accuracy
   vision_grpo: true
 """
-    with pytest.raises((ValidationError, ValueError), match="modality"):
-        load_config_from_string(yaml)
+    raw = _loader_refuses_as_staged(yaml, "training.vision_grpo")
+    with pytest.raises(ValidationError, match="modality"):
+        SoupConfig(**raw)
 
 
 def test_vision_grpo_on_sft_rejected():
@@ -307,5 +315,6 @@ training:
   lr: 1e-4
   vision_grpo: true
 """
-    with pytest.raises((ValidationError, ValueError), match="task"):
-        load_config_from_string(yaml)
+    raw = _loader_refuses_as_staged(yaml, "training.vision_grpo")
+    with pytest.raises(ValidationError, match="task"):
+        SoupConfig(**raw)
