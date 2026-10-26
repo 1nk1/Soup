@@ -243,7 +243,7 @@ Before the first run of an existing config on 0.77.0, run `soup doctor --config 
 
 - Add a RunPod cloud-training controller with plan-only rendering, bounded YAML validation, isolated credential-gated submission, SSH identity isolation, per-run host files and confirmed Pod deletion with transient-error retries. Preserve proxy, temporary-directory, Windows and SSH-agent settings while filtering other parent variables, and replace unencodable log characters under isolated Python. Report safe failure reasons and distinguish rejected creates from ambiguous launches; not yet live-validated. (#2081 by @kok-o) Before the release, the controller was changed to run `ssh` and `scp` by the absolute path found on `PATH` (never the current directory) without `RUNPOD_API_KEY` in their environment, to keep `PATHEXT` and `NoDefaultCurrentDirectoryInExePath`, and to fetch results into a dedicated new directory, moving only the expected output directory into place.
 
-- Add the `documents` extra (`pypdf>=6.19.0` and `python-docx>=1.2.0`) for PDF/DOCX ingestion, and point missing-reader errors to its install command; Markdown and TXT need no extra (#2057 by @kok-o in #2096). Try: `pip install "soup-cli[documents]"`, then `soup data ingest <file>` on a PDF or DOCX file.
+- Add the `documents` extra (`pypdf>=6.21.2` and `python-docx>=1.2.0`) for PDF/DOCX ingestion, and point missing-reader errors to its install command; Markdown and TXT need no extra (#2057 by @kok-o in #2096). Try: `pip install "soup-cli[documents]"`, then `soup data ingest <file>` on a PDF or DOCX file.
 
 - **SimPO runs natively on Apple Silicon: `task: simpo` with `backend: mlx` (#1999 by @dryn85-max
   in #2097).** It was refused at config load. Soup's own MLX loop now trains TRL 0.29.1's CPO
@@ -915,6 +915,8 @@ and training report the offending label through the shared converter (#2119 by @
 - **`training.lora.rank_pattern` and `alpha_pattern` are refused with `backend: unsloth` instead of being silently ignored (#2153).** Every unsloth setup, for SFT, DPO, GRPO, PPO, KTO, ORPO, SimPO, IPO, BCO, preference, pretrain, embedding and TTS alike, goes through one loader that gives `FastLanguageModel.get_peft_model` a single scalar `lora.r` and `lora.alpha` and has no parameter for a pattern, so a config that asked for a per-module rank or alpha loaded, passed `soup train --dry-run` and trained a uniform adapter. Now refused at config load, naming each field the config set, `backend: unsloth`, and the two ways out: remove the pattern, or use `backend: transformers`, which applies it. A task with no unsloth setup, SFT with a vision or audio modality, and `lora.r: 0` keep their own refusals. An empty `{}` or `null` sets nothing and still loads, and `transformers` configs are unchanged. This is a stop-gap: it goes away when the unsloth loader honours the patterns. (#2165)
 
 ### Security
+
+- Raise the pypdf floor for the `documents` extra to 6.21.2 (`pypdf>=6.21.2`).
 
 - Bound judge replies to 1 MiB and HTTP generation/Magpie replies to 8 MiB while
   streaming decoded bytes, including gzip expansion. Oversized replies are
