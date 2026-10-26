@@ -304,3 +304,36 @@ class TestCommandLine:
             "binding non-loopback host '0.0.0.0' requires --tool-auth-token <secret>"
             in _plain(result.output)
         )
+
+
+class TestTheServingDocs:
+    """docs/serving-and-export.md says what the two code routes can reach and how to
+    choose and carry the token."""
+
+    def _section(self) -> str:
+        from pathlib import Path
+
+        text = (Path(__file__).parents[1] / "docs" / "serving-and-export.md").read_text(
+            encoding="utf-8"
+        )
+        start = text.index("## Server-Side Tool Endpoints")
+        end = text.index("**What `--tool-auth-token` does not cover.**")
+        return " ".join(text[start:end].split())
+
+    def test_both_code_routes_say_they_run_as_the_server_user(self):
+        section = self._section()
+        assert "world-readable system files" not in section
+        assert (
+            "the code runs as the server's user, with the network cut and a scrubbed "
+            "environment, and can read and write every file that user can"
+        ) in section
+        assert (
+            "the command runs as the server's user and can read and write every file that "
+            "user can"
+        ) in section
+        assert "in a container, a VM or under a dedicated unprivileged account" in section
+
+    def test_the_token_advice_names_a_long_random_token_and_loopback_or_tls(self):
+        section = self._section()
+        assert 'python -c "import secrets; print(secrets.token_urlsafe(32))"' in section
+        assert "keep the server on loopback or behind a proxy that terminates TLS" in section
