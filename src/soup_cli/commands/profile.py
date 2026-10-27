@@ -150,8 +150,11 @@ def _render_profile(result: dict, cfg, gpu_memory_gb: float, gpu_memory_source: 
         f"Params:    [bold]{result['model_params_b']:.1f}B[/] {trainable_str}\n"
         f"Quantization: [bold]{result['quantization']}[/]"
     )
-    if result["gradient_checkpointing"]:
-        model_info += "\nGradient checkpointing: [bold green]enabled[/]"
+    if result["gradient_checkpointing_tier"] != "off":
+        model_info += (
+            "\nGradient checkpointing: "
+            f"[bold green]enabled[/] ({result['gradient_checkpointing_tier']})"
+        )
 
     # Memory breakdown table
     mem_table = Table(show_header=False, box=None, padding=(0, 2))
@@ -228,7 +231,7 @@ def _render_profile(result: dict, cfg, gpu_memory_gb: float, gpu_memory_source: 
             f"[green]OK[/] Recommended batch_size: {result['recommended_batch_size']}"
         )
 
-    if result["total_memory_gb"] > 24 and not result["gradient_checkpointing"]:
+    if result["total_memory_gb"] > 24 and result["gradient_checkpointing_tier"] == "off":
         recs.append(
             "[yellow]![/] Consider gradient_checkpointing: true for memory savings"
         )
