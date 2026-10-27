@@ -113,9 +113,11 @@ coming from 0.76.x, run `soup doctor --config soup.yaml` first and read the
   some long-sequence, large-vocabulary runs it let through, and `--allow-oom-attempt` still
   launches them. Outside that range (a larger or mixture-of-experts model, `medium` or
   `selective` checkpointing, `use_liger` / `use_cut_ce`, `backend: unsloth`) a run that does
-  not fit gets the estimate as a warning and starts, unless its weights and the CUDA context
-  alone are more than the card holds: that run is refused there too, and
-  `--allow-oom-attempt` still launches it.
+  not fit gets the estimate as a warning and starts, unless its weights, the CUDA context and
+  the gradients and optimizer state of the parameters it trains are more than the card holds
+  (a 7B full fine-tune on 80 GB, Llama-3.1-70B in 4-bit on 24 GB): that run is refused there
+  too. LoRA runs and runs that train a subset (Spectrum, LISA, freezing) are judged on fewer
+  terms, and `--allow-oom-attempt` still launches a refused run.
 - **External programs start by an absolute path found on `PATH`.** The current directory and
   relative `PATH` entries are no longer searched: a tool that only lives there needs its
   directory on `PATH`.
