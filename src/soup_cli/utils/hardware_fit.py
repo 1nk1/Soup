@@ -281,6 +281,37 @@ CONFIG_QUANT_TO_FIT = {
 #: ``batch_size: auto`` resolves at train time; ``soup profile`` prices this instead.
 PROFILE_AUTO_BATCH = 4
 
+#: What the estimate's coefficients were fitted on (``benchmarks/gate-2049-resident-vram.md``).
+CALIBRATED_RANGE = "dense models of 3B and below on one 6 GB card"
+#: The largest dense model counted as inside it: the measured rows stop at 3.2B
+#: (Llama-3.2-3B), so a "3B" model is in and the next size up (4B) is not.
+CALIBRATED_MAX_PARAMS_B = 3.5
+
+
+def outside_calibrated_range(
+    inp: HardwareFitInput, *, backend: Optional[str] = None
+) -> tuple[str, ...]:
+    """Why ``inp`` is outside the range the estimate was fitted on; empty when inside.
+
+    The pre-flight refuses a run only inside it. Outside it the same numbers are an
+    extrapolation (a larger model, a mixture-of-experts one, a checkpointing tier or
+    fused loss nobody measured, or a backend with its own loss and checkpointing), so
+    they are printed as a warning and the run continues.
+    """
+    reasons = []
+    if inp.params_b > CALIBRATED_MAX_PARAMS_B:
+        reasons.append(f"{inp.params_b:.1f}B parameters")
+    if inp.shape is not None and inp.shape.moe:
+        reasons.append("a mixture-of-experts model")
+    if inp.gradient_checkpointing in ("medium", "selective"):
+        reasons.append(f"{inp.gradient_checkpointing} gradient checkpointing")
+    if inp.fused_loss:
+        noun = "flag" if len(inp.fused_loss) == 1 else "flags"
+        reasons.append(f"fused-loss {noun} {' and '.join(sorted(inp.fused_loss))}")
+    if backend == "unsloth":
+        reasons.append("backend unsloth")
+    return tuple(reasons)
+
 #: Tasks whose model has no vocabulary-sized output, so the estimate charges no
 #: logits: the classifier family and reward_model load
 #: ``AutoModelForSequenceClassification`` (``trainer/classifier.py``,
@@ -489,6 +520,7 @@ __all__ = [
     "decide_hardware_fit",
     "estimate_peak_vram_gb",
     "hardware_fit_input_from_config",
+    "outside_calibrated_range",
     "validate_batch_size",
     "validate_seq_len",
 ]

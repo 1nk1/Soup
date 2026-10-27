@@ -75,6 +75,9 @@ class ModelShape:
     params_source: str
     #: "config.json" when the dims were read, "guessed" when derived from params.
     shape_source: str
+    #: A mixture-of-experts config (it names a count of experts). The estimate prices
+    #: such a model as a dense one, and says it is outside what it was fitted on.
+    moe: bool = False
 
     @property
     def guessed(self) -> bool:
@@ -205,6 +208,20 @@ def _text_config(config: dict) -> dict:
     return config
 
 
+_EXPERT_COUNT_KEYS = (
+    "num_local_experts", "n_routed_experts", "num_experts", "moe_num_experts",
+    "num_routed_experts",
+)
+
+
+def _is_moe(config: dict) -> bool:
+    """Whether a config.json describes a mixture-of-experts model."""
+    model_type = str(config.get("model_type") or "").lower()
+    if "moe" in model_type or "mixtral" in model_type:
+        return True
+    return any((_int_field(config, key) or 0) > 1 for key in _EXPERT_COUNT_KEYS)
+
+
 def params_from_config(config: dict) -> Optional[int]:
     """Parameter count of a decoder-only transformer, counted from its config.
 
@@ -278,6 +295,7 @@ def shape_from_config(
         model_type=str(text.get("model_type") or config.get("model_type") or ""),
         params_source=params_source,
         shape_source="config.json",
+        moe=_is_moe(text) or _is_moe(config),
     )
 
 

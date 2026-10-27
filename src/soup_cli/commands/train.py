@@ -403,12 +403,21 @@ def _hardware_fit_preflight(cfg, gpu_info, *, allow_oom_attempt: bool) -> None:
                 f"quantization: {quantization}"
             )
         return
-    from soup_cli.utils.hardware_fit import VRAM_SAFETY_MARGIN, decide_hardware_fit
+    from soup_cli.utils.hardware_fit import (
+        CALIBRATED_RANGE,
+        VRAM_SAFETY_MARGIN,
+        decide_hardware_fit,
+        outside_calibrated_range,
+    )
 
     report = decide_hardware_fit(inp, available_vram_gb=total_bytes / 1e9)
     if report.ok:
         return
     b = report.breakdown
+    # The estimate is fitted on one range of runs; beyond it the same numbers are an
+    # extrapolation, so they are a warning there and a refusal only inside it.
+    outside = outside_calibrated_range(inp, backend=getattr(cfg, "backend", None))
+    refuse = not (allow_oom_attempt or outside)
     # #1631: a "quantized" run priced like an unquantized one needs a word why.
     dequantized = _HW_FIT_DEQUANTIZED_ON_LOAD.get(inp.quant)
     note = (
@@ -434,12 +443,26 @@ def _hardware_fit_preflight(cfg, gpu_info, *, allow_oom_attempt: bool) -> None:
         if b.estimate is not None
         else ""
     )
-    tail = (
-        "[yellow]--allow-oom-attempt set: launching anyway.[/]"
-        if allow_oom_attempt
-        else "Reduce batch_size / max_length, enable gradient_checkpointing or "
-        "quantization, or pass [bold]--allow-oom-attempt[/] to try anyway."
-    )
+    if allow_oom_attempt:
+        tail = "[yellow]--allow-oom-attempt set: launching anyway.[/]"
+    elif outside:
+        tail = "[yellow]Warning only: launching anyway.[/]"
+    else:
+        tail = (
+            "Reduce batch_size / max_length, enable gradient_checkpointing or "
+            "quantization, or pass [bold]--allow-oom-attempt[/] to try anyway."
+        )
+    # Where this run sits against what the estimate was fitted on.
+    if outside:
+        footnote += (
+            f"\n[dim]This run is outside the calibrated range ({CALIBRATED_RANGE}): "
+            f"{', '.join(outside)}; the estimate may overstate the peak.[/]"
+        )
+    elif refuse:
+        footnote += (
+            f"\n[dim]This run is inside the calibrated range ({CALIBRATED_RANGE}); "
+            "--allow-oom-attempt launches it anyway.[/]"
+        )
     console.print(
         Panel(
             f"Predicted peak VRAM [bold]{report.peak_vram_gb:.1f} GB[/] "
@@ -450,14 +473,12 @@ def _hardware_fit_preflight(cfg, gpu_info, *, allow_oom_attempt: bool) -> None:
             f"grads {b.gradients_gb:.1f} | activations {b.activations_gb:.1f}"
             f"{extra} | overhead {b.overhead_gb:.1f} GB\n" + note + "\n" + tail + footnote,
             title=(
-                "[yellow]Hardware-fit warning[/]"
-                if allow_oom_attempt
-                else "[bold red]Hardware-fit gate[/]"
+                "[bold red]Hardware-fit gate[/]" if refuse else "[yellow]Hardware-fit warning[/]"
             ),
-            border_style="yellow" if allow_oom_attempt else "red",
+            border_style="red" if refuse else "yellow",
         )
     )
-    if not allow_oom_attempt:
+    if refuse:
         raise typer.Exit(1)
 
 

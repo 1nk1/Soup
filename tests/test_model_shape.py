@@ -315,3 +315,40 @@ def test_reading_a_shape_and_estimating_never_imports_torch(local_model):
     )
     out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, check=True)
     assert out.stdout.strip() == "False", out.stdout + out.stderr
+
+
+class TestMixtureOfExperts:
+    """``ModelShape.moe`` marks a model outside what the estimate was fitted on."""
+
+    def _moe(self, config: dict) -> bool:
+        shape = model_shape.shape_from_config(config, params=1_000_000_000, params_source="x")
+        assert shape is not None
+        return shape.moe
+
+    def test_a_dense_config_is_not_moe(self):
+        assert self._moe(dict(_CONFIG)) is False
+
+    @pytest.mark.parametrize(
+        "extra",
+        [
+            {"num_local_experts": 8},
+            {"num_experts": 128},
+            {"n_routed_experts": 256},
+            {"moe_num_experts": 16},
+            {"model_type": "mixtral"},
+            {"model_type": "qwen3_moe"},
+        ],
+    )
+    def test_an_expert_count_or_a_moe_model_type_marks_it(self, extra):
+        assert self._moe({**_CONFIG, **extra}) is True
+
+    def test_the_text_section_of_a_multimodal_config_is_read(self):
+        nested = {**_CONFIG, "num_local_experts": 16}
+        assert self._moe({"model_type": "llama4", "text_config": nested}) is True
+
+    @pytest.mark.parametrize("count", [0, 1, True, "8", None, -4])
+    def test_one_expert_or_a_non_count_is_dense(self, count):
+        assert self._moe({**_CONFIG, "num_local_experts": count}) is False
+
+    def test_a_guessed_shape_is_not_marked(self):
+        assert guessed_shape(46.7).moe is False

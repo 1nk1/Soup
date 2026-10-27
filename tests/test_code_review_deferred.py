@@ -67,9 +67,11 @@ def test_hardware_fit_preflight_gate_and_optout():
 
     from soup_cli.commands import train as train_mod
 
-    cfg = load_config_from_string(_FIT_YAML)
+    # A 3B model is inside the range the estimate was fitted on, where the gate refuses
+    # (a 7B one warns instead: tests/test_hardware_fit_envelope.py).
+    cfg = load_config_from_string(_FIT_YAML.replace("meta-llama/Llama-2-7b-hf", "Qwen/Qwen2.5-3B"))
 
-    # 4 GB can't hold a 7B model -> refuse (exit) by default.
+    # 4 GB can't hold a 3B model at batch 8 -> refuse (exit) by default.
     with pytest.raises(typer.Exit):
         train_mod._hardware_fit_preflight(
             cfg, {"memory_total_bytes": int(4e9)}, allow_oom_attempt=False
