@@ -24,7 +24,7 @@ import os
 import re
 import threading
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 #: A config.json larger than this is not a config.json.
 _MAX_CONFIG_BYTES = 4 * 1024 * 1024
@@ -135,6 +135,16 @@ def _hub_lookup(repo: str, *, allow_network: bool) -> tuple[Optional[dict], Opti
     except Exception:  # noqa: BLE001 - gated, missing or offline: no config, and no echo
         return None, None
     return _read_json_file(path), os.path.dirname(path)
+
+
+def _config_cached(repo: str) -> bool:
+    """Whether the Hugging Face cache already holds ``repo``'s ``config.json``."""
+    try:
+        from huggingface_hub import try_to_load_from_cache
+
+        return isinstance(try_to_load_from_cache(repo, "config.json"), str)
+    except Exception:  # noqa: BLE001 - a malformed cache is the same as no cache
+        return False
 
 
 def _within_deadline(call: Any, seconds: float) -> Any:
@@ -319,12 +329,28 @@ def guessed_shape(params_b: float, *, params_source: str = "name") -> ModelShape
     )
 
 
-def read_model_shape(base: str, *, allow_network: bool = True) -> ModelShape:
+def read_model_shape(
+    base: str,
+    *,
+    allow_network: bool = True,
+    on_hub_request: Optional[Callable[[], None]] = None,
+) -> ModelShape:
     """The shape of ``base`` (a local directory or a Hub id); never raises.
 
     ``allow_network=False`` keeps to the local directory and the cache.
+    ``on_hub_request`` is called once, just before the first request to the Hub, so a
+    command can say it is about to wait; it is not called when nothing will be sent
+    (a local directory, a cached snapshot with its weights, offline mode).
     """
     from soup_cli.utils.gpu import model_size_from_name, param_count_from_local_safetensors
+
+    announced = False
+
+    def reach_hub() -> None:
+        nonlocal announced
+        if on_hub_request is not None and not announced and allow_network and not hub_offline():
+            announced = True
+            on_hub_request()
 
     base = base or ""
     config: Optional[dict] = None
@@ -333,6 +359,8 @@ def read_model_shape(base: str, *, allow_network: bool = True) -> ModelShape:
         config = _read_json_file(os.path.join(base, "config.json"))
         snapshot = base
     elif _REPO_ID.fullmatch(base) and ".." not in base:
+        if on_hub_request is not None and not _config_cached(base):
+            reach_hub()
         config, snapshot = _hub_lookup(base, allow_network=allow_network)
 
     params: Optional[int] = None
@@ -341,6 +369,7 @@ def read_model_shape(base: str, *, allow_network: bool = True) -> ModelShape:
         params = param_count_from_local_safetensors(snapshot)
         params_source = "safetensors"
     if params is None and not os.path.isdir(base) and config is not None:
+        reach_hub()
         params = _hub_param_count(base, allow_network=allow_network)
         params_source = "hub safetensors metadata"
     if params is None:

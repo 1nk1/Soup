@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Any, Optional, Union
+from typing import Any, Callable, Optional, Union
 
 from soup_cli.utils.model_shape import ModelShape
 from soup_cli.utils.vram_estimate import (
@@ -349,6 +349,7 @@ def hardware_fit_input_from_config(
     allow_network: bool = True,
     profile_defaults: bool = False,
     gpu_memory_gb: Optional[float] = None,
+    on_hub_request: Optional[Callable[[], None]] = None,
 ) -> Optional[HardwareFitInput]:
     """The estimate's input for a ``SoupConfig``: the train pre-flight, ``soup profile``
     and the MCP ``profile`` tool all build it here, so they price the same run (#2049).
@@ -359,6 +360,7 @@ def hardware_fit_input_from_config(
     profile``'s reading instead: ``auto`` is priced at batch 4 and a quantization
     with no memory model at bf16, as ``soup profile`` always did. ``gpu_memory_gb``
     is the card's memory in GiB, which ``gradient_checkpointing: auto`` resolves on.
+    ``on_hub_request`` is called just before the first request to the Hub, if one is made.
     """
     from soup_cli.utils.model_shape import read_model_shape
 
@@ -378,7 +380,11 @@ def hardware_fit_input_from_config(
         if not profile_defaults:
             return None
         quant = "none"
-    shape = read_model_shape(getattr(cfg, "base", "") or "", allow_network=allow_network)
+    shape = read_model_shape(
+        getattr(cfg, "base", "") or "",
+        allow_network=allow_network,
+        on_hub_request=on_hub_request,
+    )
     peft = resolve_peft_mode(cfg, quant=quant)
     optimizer = str(getattr(tcfg, "optimizer", "adamw_torch") or "adamw_torch")
     if optimizer not in _VALID_OPTIMIZERS:

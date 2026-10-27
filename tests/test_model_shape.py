@@ -352,3 +352,63 @@ class TestMixtureOfExperts:
 
     def test_a_guessed_shape_is_not_marked(self):
         assert guessed_shape(46.7).moe is False
+
+
+class TestHubRequestNotice:
+    """``on_hub_request`` fires once, just before the first request that would reach the Hub."""
+
+    @pytest.fixture
+    def hub(self, monkeypatch):
+        monkeypatch.delenv("HF_HUB_OFFLINE", raising=False)
+        monkeypatch.delenv("TRANSFORMERS_OFFLINE", raising=False)
+        events: list[str] = []
+        monkeypatch.setattr(model_shape, "_config_cached", lambda repo: False)
+        monkeypatch.setattr(
+            model_shape,
+            "_hub_lookup",
+            lambda repo, **kw: events.append("config") or (dict(_CONFIG), None),
+        )
+        monkeypatch.setattr(
+            model_shape, "_hub_param_count", lambda repo, **kw: events.append("count") or 99
+        )
+        return events
+
+    def test_it_fires_once_before_the_first_request(self, hub):
+        read_model_shape("someone/x", on_hub_request=lambda: hub.append("notice"))
+        assert hub == ["notice", "config", "count"]
+
+    def test_a_cached_config_still_fires_for_the_size_request(self, hub, monkeypatch):
+        monkeypatch.setattr(model_shape, "_config_cached", lambda repo: True)
+        read_model_shape("someone/x", on_hub_request=lambda: hub.append("notice"))
+        assert hub == ["config", "notice", "count"]
+
+    def test_a_cached_snapshot_with_weights_never_fires(self, hub, monkeypatch, local_model):
+        model, _ = local_model
+        monkeypatch.setattr(model_shape, "_config_cached", lambda repo: True)
+        monkeypatch.setattr(
+            model_shape,
+            "_hub_lookup",
+            lambda repo, **kw: hub.append("config") or (dict(_CONFIG), str(model)),
+        )
+        read_model_shape("someone/x", on_hub_request=lambda: hub.append("notice"))
+        assert hub == ["config"]
+
+    def test_it_never_fires_without_network(self, hub):
+        read_model_shape("someone/x", allow_network=False, on_hub_request=lambda: hub.append("n"))
+        assert "n" not in hub
+
+    @pytest.mark.parametrize("variable", ["HF_HUB_OFFLINE", "TRANSFORMERS_OFFLINE"])
+    def test_it_never_fires_offline(self, hub, monkeypatch, variable):
+        monkeypatch.setenv(variable, "1")
+        read_model_shape("someone/x", on_hub_request=lambda: hub.append("n"))
+        assert "n" not in hub
+
+    def test_it_never_fires_for_a_local_directory(self, hub, local_model):
+        model, _ = local_model
+        read_model_shape(str(model), on_hub_request=lambda: hub.append("n"))
+        assert hub == []
+
+    @pytest.mark.parametrize("base", ["../escape", "a b", ""])
+    def test_it_never_fires_for_a_name_that_is_not_a_repo_id(self, hub, base):
+        read_model_shape(base, on_hub_request=lambda: hub.append("n"))
+        assert hub == []
