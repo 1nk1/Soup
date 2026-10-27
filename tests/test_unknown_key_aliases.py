@@ -154,3 +154,143 @@ class TestAliasSuggestions:
         assert "use_ring_attention" not in message
         assert "did you mean" not in message
 
+
+
+def _hint(raw: dict, *, path: str) -> str:
+    """The report line for ``path``, with the path itself and the verdict word removed."""
+    unknown = [item for item in find_unknown_config_keys(raw) if item.path == path]
+    assert len(unknown) == 1, (path, find_unknown_config_keys(raw))
+    line = strip_ansi(format_unknown_keys(unknown, include_deadline=False))
+    return " ".join(line.replace(f"'{path}'", "<key>").split())
+
+
+def _both_levels(key: str) -> tuple[str, str]:
+    """The hint for ``key`` under ``training:`` and at the top level of the file."""
+    return (
+        _hint(_raw_with_training(**{key: 4}), path=f"training.{key}"),
+        _hint(_raw_with_root(**{key: 4}), path=key),
+    )
+
+
+class TestNearIdenticalTyposOnly:
+    """"use X" is for the alias table's own spellings and one-edit typos of them (#2099)."""
+
+    @pytest.mark.parametrize(
+        ("typo", "target"),
+        [
+            ("learning_rat", "training.lr"),
+            ("lerning_rate", "training.lr"),
+            ("num_train_epoch", "training.epochs"),
+            ("per_device_train_batch_siz", "training.batch_size"),
+            ("train_batch_siz", "training.batch_size"),
+        ],
+    )
+    def test_a_one_edit_typo_of_an_alias_still_says_use(self, typo, target):
+        for raw, path in (
+            (_raw_with_training(**{typo: 1}), f"training.{typo}"),
+            (_raw_with_root(**{typo: 1}), typo),
+        ):
+            unknown = [item for item in find_unknown_config_keys(raw) if item.path == path]
+            assert len(unknown) == 1
+            assert unknown[0].alias == target, path
+            assert f"use {target}" in format_unknown_keys(unknown)
+
+    def test_a_substituted_word_is_not_a_typo(self):
+        # 0.92 similar as a string, but "trial" is not a spelling of "train".
+        key = "per_device_trial_batch_size"
+        from difflib import SequenceMatcher
+
+        assert SequenceMatcher(None, key, "per_device_train_batch_size").ratio() >= 0.9
+        for hint in _both_levels(key):
+            assert "use training.batch_size" not in hint
+            assert "training.batch_size" not in hint
+
+    def test_a_fuzzy_match_to_an_alias_never_says_use(self):
+        unknown = find_unknown_config_keys(_raw_with_training(train_epochs=3))
+        assert len(unknown) == 1
+        assert unknown[0].alias is None
+        assert "use training" not in format_unknown_keys(unknown)
+
+    def test_the_alias_cutoff_is_not_looser_than_a_typo(self):
+        # Mutation guard: with a 0.7 cutoff and no token check, a fuzzy neighbour of
+        # the alias would say "use". Pin the keys that used to.
+        for key in ("learning_rate_decay", "per_device_eval_batch_size", "warmup_steps"):
+            for raw, path in (
+                (_raw_with_training(**{key: 1}), f"training.{key}"),
+                (_raw_with_root(**{key: 1}), key),
+            ):
+                unknown = [i for i in find_unknown_config_keys(raw) if i.path == path]
+                assert len(unknown) == 1
+                assert unknown[0].alias is None, path
+
+
+class TestNamesThatAreNotTheTrainingSettings:
+    """HF names that look like an alias but mean something else get their own answer."""
+
+    @pytest.mark.parametrize(
+        "key", ["per_device_eval_batch_size", "per_gpu_eval_batch_size", "eval_batch_size"]
+    )
+    def test_an_evaluation_batch_size_is_not_the_training_batch_size(self, key):
+        training, root = _both_levels(key)
+        assert training == root
+        assert "no separate evaluation batch size" in training
+        assert "training.batch_size" not in training
+        assert "use " not in training
+
+    @pytest.mark.parametrize("key", ["warmup_steps", "warmup_step"])
+    def test_warmup_in_steps_is_not_silently_a_fraction(self, key):
+        training, root = _both_levels(key)
+        assert training == root
+        assert "use training.warmup_ratio" not in training
+        assert "fraction" in training
+        assert "no step-count" in training
+        assert "training.warmup_ratio" in training
+
+    def test_learning_rate_decay_is_not_the_learning_rate(self):
+        training, root = _both_levels("learning_rate_decay")
+        assert training == root
+        assert "training.lr" not in training
+        assert "use " not in training
+
+    @pytest.mark.parametrize(
+        "key",
+        [
+            "per_device_eval_batch_size",
+            "per_gpu_eval_batch_size",
+            "eval_batch_size",
+            "warmup_steps",
+            "warmup_step",
+            "learning_rate_decay",
+        ],
+    )
+    def test_the_answer_is_the_same_at_both_levels_and_marks_the_key_refused(self, key):
+        training, root = _both_levels(key)
+        assert training == root
+        refused = format_unknown_keys(
+            find_unknown_config_keys(_raw_with_training(**{key: 1})), include_deadline=False
+        )
+        assert refused.lower().endswith("refused.")
+        assert f"'training.{key}'" in refused
+
+    def test_a_note_is_a_fact_not_a_replacement(self):
+        # The notes only name settings that exist, and none of them is offered as "use X".
+        import re
+
+        from soup_cli.config.aliases import CONFIG_NOTES
+
+        assert CONFIG_NOTES
+        for path, note in CONFIG_NOTES.items():
+            assert path not in CONFIG_ALIASES, path
+            assert note.endswith("."), path
+            for field in re.findall(r"training\.(\w+)", note):
+                assert field in TrainingConfig.model_fields, (path, field)
+
+    def test_the_loader_refuses_with_the_note(self):
+        from soup_cli.config.loader import load_config_from_string
+
+        text = _BASE_CONFIG + "training:\n  per_device_eval_batch_size: 4\n"
+        with pytest.raises((SystemExit, ValueError)) as caught:
+            load_config_from_string(text)
+        message = str(caught.value)
+        assert "no separate evaluation batch size" in message
+        assert "training.batch_size" not in message

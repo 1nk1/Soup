@@ -1187,7 +1187,7 @@ Config validation error:
   unknown config key 'training.quantizaton' - did you mean 'quantization' or 'quantization_aware'? Refused.
 ```
 
-Known foreign parameter names (such as Hugging Face `learning_rate` or `num_train_epochs`) get an authoritative `use <field>` hint instead of a guess.
+Known foreign parameter names (such as Hugging Face `learning_rate` or `num_train_epochs`), and one-edit typos of them, get an authoritative `use <field>` hint instead of a guess; a name that is merely similar gets the "did you mean" ranking over the fields Soup declares. A Hugging Face name with no Soup counterpart (`per_device_eval_batch_size`, `warmup_steps`) gets a sentence saying so, at the top level and under `training:` alike, and no replacement field.
 
 **Since v0.75 an unknown config key refuses the load.** v0.74 shipped the same report
 as a warning that named this deadline, so there was exactly one release of notice —
