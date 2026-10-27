@@ -15,9 +15,10 @@ from typer.testing import CliRunner
 
 from soup_cli.cli import app
 from tests._tiny_checkpoint import write_tiny_model
+from tests.conftest import strip_ansi
 
 ESC = "\x1b"
-BIDI = "‮"
+BIDI = "\u202e"
 NAME = f"q_proj{ESC}]0;title{BIDI}\x07x"
 
 
@@ -38,7 +39,7 @@ def _profile(workdir, targets) -> str:
     (workdir / "soup.yaml").write_text(yaml.safe_dump(document), encoding="utf-8")
     result = CliRunner().invoke(app, ["profile", "--config", "soup.yaml", "--gpu", "a100"])
     assert result.exit_code == 0, (result.output, repr(result.exception))
-    return result.output
+    return strip_ansi(result.output)
 
 
 class TestProfileTargetModules:
@@ -64,16 +65,18 @@ class TestProfileTargetModules:
 
 class TestBisectCheckpointIds:
     def _run(self, *ids: str):
-        return CliRunner().invoke(
+        result = CliRunner().invoke(
             app, ["adapters", "bisect", *ids, "--eval-command", "{ckpt}"]
         )
+        result.plain = strip_ansi(result.output)  # Rich's colour codes out, the rest as printed
+        return result
 
     def test_a_failed_probe_names_the_checkpoint_without_control_characters(self):
         result = self._run(f"ckpt{ESC}]0;t{BIDI}-1", "ckpt-2")
-        assert "Eval failed for" in result.output, (result.output, repr(result.exception))
-        assert ESC not in result.output
-        assert BIDI not in result.output
+        assert "Eval failed for" in result.plain, (result.output, repr(result.exception))
+        assert ESC not in result.plain
+        assert BIDI not in result.plain
 
     def test_the_checkpoint_name_is_still_shown(self):
         result = self._run(f"ckpt{ESC}-1", "ckpt-2")
-        assert "Eval failed for ckpt-1" in " ".join(result.output.split())
+        assert "Eval failed for ckpt-1" in " ".join(result.plain.split())
