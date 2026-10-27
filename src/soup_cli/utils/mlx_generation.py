@@ -23,8 +23,12 @@ def validate_native_options(
         raise ValueError("MLX selects its native device; omit --device")
     if hub != "hf":
         raise ValueError("MLX generation supports --hub hf only")
-    if task != "text" or batch_size != 1 or cuda_graphs:
-        raise ValueError("MLX generation requires --task text, --batch-size 1 and no --cuda-graphs")
+    if task != "text":
+        raise ValueError("MLX generation requires --task text")
+    if batch_size != 1:
+        raise ValueError("MLX generation requires --batch-size 1")
+    if cuda_graphs:
+        raise ValueError("MLX generation does not support --cuda-graphs")
 
 
 def _same_base(left: str, right: str) -> bool:

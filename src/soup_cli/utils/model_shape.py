@@ -33,6 +33,7 @@ _MAX_CONFIG_BYTES = 4 * 1024 * 1024
 #: a config past them is treated as unreadable.
 _MAX_DIM = 2**24
 _MAX_LAYERS = 2**16
+_MAX_EXPERTS = 2**16
 
 _OFFLINE_VALUES = frozenset({"1", "TRUE", "YES", "ON"})
 
@@ -243,7 +244,9 @@ def params_from_config(config: dict) -> Optional[int]:
 
     Embeddings (twice when untied), attention projections, a gated MLP and two
     norms per layer. Biases and rotary buffers are left out; the safetensors
-    count is preferred whenever it can be read.
+    count is preferred whenever it can be read. A mixture-of-experts config prices
+    every expert (and a shared one) in every layer: approximate, since some models
+    keep a few dense layers.
     """
     shape = _dims(config)
     if shape is None:
@@ -251,6 +254,15 @@ def params_from_config(config: dict) -> Optional[int]:
     hidden, inter, layers, heads, kv, head_dim, vocab, tied = shape
     attn = hidden * heads * head_dim * 2 + hidden * kv * head_dim * 2
     mlp = 3 * hidden * inter
+    experts = max((_int_field(config, key) or 0) for key in _EXPERT_COUNT_KEYS)
+    if experts > _MAX_EXPERTS:
+        return None
+    if experts > 1:
+        expert_inter = _int_field(config, "moe_intermediate_size") or inter
+        shared = _int_field(config, "n_shared_experts", "num_shared_experts") or 0
+        if expert_inter > _MAX_DIM or shared > _MAX_EXPERTS:
+            return None
+        mlp = 3 * hidden * expert_inter * (experts + shared)
     per_layer = attn + mlp + 2 * hidden
     embed = vocab * hidden * (1 if tied else 2)
     return layers * per_layer + embed + hidden

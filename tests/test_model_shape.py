@@ -412,3 +412,75 @@ class TestHubRequestNotice:
     def test_it_never_fires_for_a_name_that_is_not_a_repo_id(self, hub, base):
         read_model_shape(base, on_hub_request=lambda: hub.append("n"))
         assert hub == []
+
+
+class TestMixtureOfExpertsParameterCount:
+    """A config.json-only count prices every expert, not one MLP per layer."""
+
+    # Mixtral-8x7B: 46.7B parameters.
+    MIXTRAL = {
+        "model_type": "mixtral",
+        "hidden_size": 4096,
+        "num_hidden_layers": 32,
+        "num_attention_heads": 32,
+        "num_key_value_heads": 8,
+        "intermediate_size": 14336,
+        "vocab_size": 32000,
+        "num_local_experts": 8,
+        "tie_word_embeddings": False,
+    }
+    # Qwen3-30B-A3B: 30.5B parameters; its experts are narrower than the dense MLP.
+    QWEN3_MOE = {
+        "model_type": "qwen3_moe",
+        "hidden_size": 2048,
+        "num_hidden_layers": 48,
+        "num_attention_heads": 32,
+        "num_key_value_heads": 4,
+        "head_dim": 128,
+        "intermediate_size": 6144,
+        "moe_intermediate_size": 768,
+        "num_experts": 128,
+        "vocab_size": 151936,
+        "tie_word_embeddings": False,
+    }
+
+    def test_mixtral_is_close_to_its_published_size(self):
+        assert params_from_config(self.MIXTRAL) == pytest.approx(46.7e9, rel=0.02)
+
+    def test_the_expert_width_is_used_when_the_config_names_one(self):
+        assert params_from_config(self.QWEN3_MOE) == pytest.approx(30.5e9, rel=0.02)
+
+    def test_a_shared_expert_is_counted_on_top(self):
+        shared = {**self.MIXTRAL, "n_shared_experts": 1}
+        extra = 3 * 4096 * 14336 * 32
+        assert params_from_config(shared) - params_from_config(self.MIXTRAL) == extra
+
+    @pytest.mark.parametrize("count", [0, 1, True, None, "8"])
+    def test_one_expert_or_no_count_is_a_dense_model(self, count):
+        dense = {**self.MIXTRAL, "num_local_experts": count}
+        assert params_from_config(dense) == params_from_config(
+            {k: v for k, v in dense.items() if k != "num_local_experts"}
+        )
+
+    def test_an_expert_count_beyond_any_model_is_no_config(self):
+        assert params_from_config({**self.MIXTRAL, "num_local_experts": 2**17}) is None
+        shape = model_shape.shape_from_config(
+            {**self.MIXTRAL, "num_local_experts": 10**400}, params=None, params_source="x"
+        )
+        assert shape is None
+
+    def test_the_shape_of_a_config_only_moe_model_says_what_the_count_is(self):
+        from soup_cli.utils.vram_estimate import RunSpec, estimate_vram
+
+        shape = model_shape.shape_from_config(self.MIXTRAL, params=None, params_source="x")
+        assert shape.moe
+        notes = " ".join(estimate_vram(shape, RunSpec(seq_len=512, batch_size=1)).notes)
+        assert "mixture-of-experts" in notes
+        assert "approximate" in notes
+
+    def test_a_dense_config_only_note_does_not_mention_experts(self):
+        from soup_cli.utils.vram_estimate import RunSpec, estimate_vram
+
+        shape = model_shape.shape_from_config(dict(_CONFIG), params=None, params_source="x")
+        notes = " ".join(estimate_vram(shape, RunSpec(seq_len=512, batch_size=1)).notes)
+        assert "mixture-of-experts" not in notes
