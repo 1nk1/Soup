@@ -25,6 +25,7 @@ from soup_cli.commands.train import _hardware_fit_preflight
 from soup_cli.config.loader import load_config_from_string
 from soup_cli.config.schema import TEMPLATES
 from soup_cli.utils import hardware_fit, model_shape
+from soup_cli.utils.vram_estimate import GB, OVERHEAD_FIXED_BYTES
 from tests.conftest import strip_ansi
 
 # Llama-3.1-8B: 8.03B parameters, a 128,256-token vocabulary.
@@ -52,8 +53,34 @@ _SMALL = {
 }
 _SMALL_PARAMS = 494_032_768
 
+# Llama-3.1-70B: 70.55B parameters; its 4-bit weights alone are about 35 GB.
+_LLAMA_70B = {
+    "model_type": "llama",
+    "hidden_size": 8192,
+    "num_hidden_layers": 80,
+    "num_attention_heads": 64,
+    "num_key_value_heads": 8,
+    "intermediate_size": 28672,
+    "vocab_size": 128256,
+}
+_LLAMA_70B_PARAMS = 70_553_706_496
+
+# Qwen2.5-14B: 14.77B parameters; its bf16 weights alone are about 30 GB.
+_QWEN_14B = {
+    "model_type": "qwen2",
+    "hidden_size": 5120,
+    "num_hidden_layers": 48,
+    "num_attention_heads": 40,
+    "num_key_value_heads": 8,
+    "intermediate_size": 13824,
+    "vocab_size": 152064,
+}
+_QWEN_14B_PARAMS = 14_770_033_664
+
 #: A 6 GB card: too small for either model once the logits are priced.
 SIX_GB_CARD = {"memory_total_bytes": int(6e9)}
+#: Holds the 8B model's 4-bit weights (7.9 GB) and the CUDA context, but not its peak.
+TWELVE_GB_CARD = {"memory_total_bytes": int(12e9)}
 BIG_CARD = {"memory_total_bytes": int(10**15)}
 
 
@@ -160,7 +187,7 @@ class TestOutsideTheRange:
 
     def test_a_model_above_3b_is_warned_about_and_launched(self, shape_of, screen):
         shape_of(_LLAMA_8B, _LLAMA_8B_PARAMS)
-        assert _run(_yaml(gradient_checkpointing=True)) is None
+        assert _run(_yaml(gradient_checkpointing=True), card=TWELVE_GB_CARD) is None
         self._assert_warned(screen, "8.0B parameters")
 
     def test_the_review_case_batch_4_on_a_24_gib_card_is_not_refused(self, shape_of, screen):
@@ -197,7 +224,8 @@ class TestOutsideTheRange:
 
     def test_every_reason_is_listed_when_several_apply(self, shape_of, screen):
         shape_of({**_LLAMA_8B, "num_local_experts": 8}, _LLAMA_8B_PARAMS)
-        assert _run(_yaml(use_liger=True, gradient_checkpointing="medium")) is None
+        card = TWELVE_GB_CARD
+        assert _run(_yaml(use_liger=True, gradient_checkpointing="medium"), card=card) is None
         text = screen()
         for reason in (
             "8.0B parameters",
@@ -209,8 +237,76 @@ class TestOutsideTheRange:
 
     def test_the_warning_is_the_same_with_allow_oom_attempt(self, shape_of, screen):
         shape_of(_LLAMA_8B, _LLAMA_8B_PARAMS)
-        assert _run(_yaml(), allow_oom_attempt=True) is None
+        assert _run(_yaml(), card=TWELVE_GB_CARD, allow_oom_attempt=True) is None
         self._assert_warned(screen, "8.0B parameters")
+
+
+_WEIGHTS_DO_NOT_FIT = [
+    pytest.param(_LLAMA_70B, _LLAMA_70B_PARAMS, {}, 24e9, id="llama-70b-4bit-on-24-gb"),
+    pytest.param(
+        _QWEN_14B, _QWEN_14B_PARAMS, {"quantization": "none"}, 8e9, id="qwen-14b-bf16-on-8-gb"
+    ),
+    pytest.param(_LLAMA_8B, _LLAMA_8B_PARAMS, {}, 4e9, id="llama-8b-4bit-on-4-gb"),
+]
+
+
+class TestWeightsThatDoNotFitTheCard:
+    """Outside the range a peak that does not fit is a warning; the weights alone are exact.
+
+    The weights are bytes per parameter times the parameter count and the CUDA context is a
+    constant, so "outside the calibrated range" is no reason to start a run whose weights
+    and context alone are more than the card holds. (The estimate's `overhead` term is not
+    that context: it adds 5% of the whole peak, activations included.)
+    """
+
+    @pytest.mark.parametrize(("config", "params", "training", "card_bytes"), _WEIGHTS_DO_NOT_FIT)
+    def test_it_is_refused_although_the_run_is_outside_the_range(
+        self, shape_of, screen, config, params, training, card_bytes
+    ):
+        shape_of(config, params)
+        card = {"memory_total_bytes": int(card_bytes)}
+        assert _run(_yaml(**training), card=card) == 1
+        text = screen()
+        assert "Hardware-fit gate" in text
+        assert OUTSIDE in text
+        assert "not an extrapolation" in text
+        assert OVERSTATE not in text
+        assert "pass --allow-oom-attempt to try anyway" in text
+        assert "Warning only" not in text
+
+    @pytest.mark.parametrize(("config", "params", "training", "card_bytes"), _WEIGHTS_DO_NOT_FIT)
+    def test_allow_oom_attempt_still_launches_it(
+        self, shape_of, screen, config, params, training, card_bytes
+    ):
+        shape_of(config, params)
+        card = {"memory_total_bytes": int(card_bytes)}
+        assert _run(_yaml(**training), card=card, allow_oom_attempt=True) is None
+        text = screen()
+        assert "Hardware-fit warning" in text
+        assert "--allow-oom-attempt set: launching anyway." in text
+        assert "not an extrapolation" in text
+        assert OVERSTATE not in text
+
+    @pytest.mark.parametrize(
+        ("factor", "refused"), [(0.99, True), (1.01, False)], ids=["just-below", "just-above"]
+    )
+    def test_the_line_is_the_weights_plus_context_and_not_the_whole_peak(
+        self, shape_of, screen, factor, refused
+    ):
+        shape_of(_LLAMA_8B, _LLAMA_8B_PARAMS)
+        text = _yaml(gradient_checkpointing=True)
+        inp = train_mod._build_hardware_fit_input(load_config_from_string(text))
+        parts = hardware_fit.estimate_peak_vram_gb(inp)
+        exact_gb = parts.weights_gb + OVERHEAD_FIXED_BYTES / GB
+        # Both cards are below the peak, so only the weights-and-context line tells them apart.
+        assert parts.total_gb * 1.1 > exact_gb * 1.01 + 0.5
+        card = {"memory_total_bytes": int(exact_gb * factor * 1e9)}
+        assert _run(text, card=card) == (1 if refused else None)
+        shown = screen()
+        assert ("Hardware-fit gate" in shown) is refused
+        assert ("Hardware-fit warning" in shown) is not refused
+        assert ("not an extrapolation" in shown) is refused
+        assert (OVERSTATE in shown) is not refused
 
 
 class TestTheRangeCheck:
