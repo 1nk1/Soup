@@ -1243,8 +1243,11 @@ set, so a program started by bare name by Soup's libraries or by a program Soup 
 or reward script included) is not looked for in the current directory either, as on Linux and
 macOS. A value already set is kept, and Windows leaves the current directory out for any
 non-empty value, `0` included, so no setting brings the old search back: to run a program from
-the current directory, give its path (`.\tool.exe`) or put the directory on `PATH` as an absolute
-path.
+the current directory, give its path (`./tool.exe`, or an absolute path in quotes) or put the
+directory on `PATH` as an absolute path. `soup adapters bisect --eval-command` is split with POSIX
+shell rules, in which a backslash is an escape: write a Windows path with forward slashes or in
+quotes (`./tool.exe`, `"C:\tools\tool.exe"`), because `.\tool.exe` reaches the program as
+`.tool.exe`.
 
 
 ## Experiment Tracking

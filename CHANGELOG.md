@@ -97,8 +97,10 @@ an existing config.
   that runs is the one on `PATH`: `soup` sets `NoDefaultCurrentDirectoryInExePath=1` for itself
   when it is not set. A value already set is kept, and any non-empty value, `0` included, already
   leaves the current directory out, so no setting brings the old search back: to run a program
-  from the current directory, give its path (`.\tool.exe`) or put the directory on `PATH` as an
-  absolute path. (#2213)
+  from the current directory, give its path (`./tool.exe`, or an absolute path in quotes) or put
+  the directory on `PATH` as an absolute path. `soup adapters bisect --eval-command` is split with
+  POSIX shell rules, so a Windows path there takes forward slashes or quotes: `.\tool.exe` reaches
+  the program as `.tool.exe`. (#2213)
 
 ### Fixed
 
