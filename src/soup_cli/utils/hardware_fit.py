@@ -419,7 +419,7 @@ def hardware_fit_input_from_config(
             lm_head=task not in NO_LM_HEAD_TASKS,
             fused_loss=fused_loss,
         )
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, ArithmeticError):
         return None  # dims out of the predictor's supported range
 
 

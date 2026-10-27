@@ -28,6 +28,11 @@ from typing import Any, Callable, Optional
 
 #: A config.json larger than this is not a config.json.
 _MAX_CONFIG_BYTES = 4 * 1024 * 1024
+#: The largest hidden, intermediate, vocabulary, head or head-width figure a config.json
+#: may state, and the most layers. Real models are two orders of magnitude below both;
+#: a config past them is treated as unreadable.
+_MAX_DIM = 2**24
+_MAX_LAYERS = 2**16
 
 _OFFLINE_VALUES = frozenset({"1", "TRUE", "YES", "ON"})
 
@@ -98,7 +103,8 @@ def _read_json_file(path: str) -> Optional[dict]:
             return None
         with open(path, encoding="utf-8") as handle:
             data = json.load(handle)
-    except (OSError, ValueError):
+    except (OSError, ValueError, RecursionError):
+        # Unreadable or malformed: no config.json.
         return None
     return data if isinstance(data, dict) else None
 
@@ -261,6 +267,10 @@ def _dims(config: dict) -> Optional[tuple[int, int, int, int, int, int, int, boo
     head_dim = _int_field(config, "head_dim") or max(1, hidden // heads)
     inter = _int_field(config, "intermediate_size", "n_inner", "ffn_dim") or 4 * hidden
     tied = config.get("tie_word_embeddings", False) is True
+    if layers > _MAX_LAYERS or any(
+        value > _MAX_DIM for value in (hidden, inter, heads, kv, head_dim, vocab)
+    ):
+        return None  # a figure no model has: treated as no config.json
     return hidden, inter, layers, heads, kv, head_dim, vocab, tied
 
 
