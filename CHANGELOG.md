@@ -34,9 +34,9 @@ an existing config.
 - **The VRAM pre-flight prices runs with the shared estimate.** It refuses some long-sequence,
   large-vocabulary runs and some runs without gradient checkpointing that it let through;
   `--allow-oom-attempt` still launches them. Reading a Hub model's shape can reach the Hub unless
-  `HF_HUB_OFFLINE` or `TRANSFORMERS_OFFLINE` is set (#2146).
+  `HF_HUB_OFFLINE` or `TRANSFORMERS_OFFLINE` is set (#2146 by @abdulwaarith0).
 - **`/v1/tools/python` answers `timed_out: false` for a failure that is not a timeout**, with the
-  process output (#2204).
+  process output (#2204 by @Nari-Ab).
 
 ### Added
 
