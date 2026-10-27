@@ -104,7 +104,7 @@ an existing config.
 
 - **Langfuse ingestion retains zero-valued negative feedback for `soup ingest --source langfuse --logs`.** Scores of `0`, `0.0` and `false` now reach the thumbs-down signal and preference-pair construction. Only a missing or null score falls back to `rating`; explicit scores retain precedence. (#1856 by @akkupratap323 in #1871)
 
-- In `soup eval gate`, normalize malformed YAML and non-mapping roots (including `[]`, `false`, `0`, and `""`) in suite loading to ValueError so the command exits with usage error 3 and a file-specific diagnostic instead of an unhandled traceback, while `soup train --gate` exits with code 1 and training callbacks preserve their fatal failure policy for malformed suites (#1878 reported by @taljeon, fixed by @Nari-Ab in #1895).
+- In `soup eval gate`, normalize malformed YAML and non-mapping roots (including `[]`, `false`, `0`, and `""`) in suite loading to ValueError so the command exits with usage error 3 and a `Cannot load suite:` message that names the file, where malformed YAML and a list or scalar root exited 1 with a bare `Error: TypeError` / `ParserError` line (an empty root such as `[]` already exited 3 with a generic validation message), while `soup train --gate` exits with code 1 and training callbacks preserve their fatal failure policy for malformed suites (#1878 reported by @taljeon, fixed by @Nari-Ab in #1895).
 
 - Report missing dependencies accurately for adapter commands instead of reporting corrupt weights: read-only operations require numpy, while merge and arithmetic require numpy and safetensors (#2056 by @Nari-Ab in #2141).
 
@@ -130,7 +130,7 @@ an existing config.
   boundaries are not read and base parameters stay on meta. DPO's reference adapter can
   attach through the streaming wrappers. Embedding adapter initialization and reference
   copies follow PEFT's embedding parameter layout.
-  Complete #1048 item 1 in #2159 by @kok-o, following the build-time guard in #2082 by @ybai08.
+  (#1048 item 1 by @kok-o in #2159, following the build-time guard in #2082 by @ybai08)
 
 - `soup export` now removes the temporary `.soup_merge_tmp_<adapter>/` directory when a later
   step fails (llama.cpp not found, a failed clone or dependency install, or a merge that dies

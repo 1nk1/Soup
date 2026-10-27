@@ -93,7 +93,7 @@ LLM の学習は、今でも骨の折れる作業です。経験豊富なチー�
 ## 新着情報
 
 **v0.77.1 — パッチリリース：`soup data` が入力を守り、`soup plan` が `soup train` と同じ判断をし、
-GRPO が Apple Silicon で学習できるようになりました。** v0.77.0 の内容はすべてそのままです。v0.77.0 は
+GRPO が Apple Silicon で学習できるようになりました。** v0.77.0 で入ったものは何も取り消されていません。v0.77.0 は
 v0.76 が警告した設定や無視した設定を拒否するため、v0.76 で読み込めた設定が読み込めなくなることがあります。
 0.76.x から移行する場合は、まず `soup doctor --config soup.yaml` を実行し、
 [v0.77.0 のリリースノート](https://github.com/MakazhanAlpamys/Soup/releases/tag/v0.77.0)を読んでください。

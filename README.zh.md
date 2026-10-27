@@ -92,7 +92,7 @@ NF4 达到 **952 MHz 下 119.6 tok/s，峰值 3.32 GB**（修复前）——与�
 ## 最新动态
 
 **v0.77.1——补丁版本：`soup data` 不再覆盖输入，`soup plan` 与 `soup train` 的判断一致，GRPO 可在
-Apple Silicon 上训练。** v0.77.0 的其余内容保持不变。该版本会拒绝 v0.76 警告过或忽略的设置，因此在
+Apple Silicon 上训练。** v0.77.0 的内容没有任何撤回。该版本会拒绝 v0.76 警告过或忽略的设置，因此在
 v0.76 上能加载的配置可能无法加载：从 0.76.x 升级时，请先运行 `soup doctor --config soup.yaml`，并阅读
 [v0.77.0 发布说明](https://github.com/MakazhanAlpamys/Soup/releases/tag/v0.77.0)。
 

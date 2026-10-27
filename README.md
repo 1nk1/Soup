@@ -92,7 +92,7 @@ infrastructure instead of improving models. Soup fixes that.
 ## What's New
 
 **v0.77.1 — a patch: `soup data` keeps its input, `soup plan` agrees with `soup train`, and
-GRPO trains on Apple Silicon.** Everything in v0.77.0 is unchanged. That release refuses
+GRPO trains on Apple Silicon.** Nothing in v0.77.0 is taken back. That release refuses
 settings v0.76 warned about or ignored, so a config that loaded on v0.76 can stop loading:
 coming from 0.76.x, run `soup doctor --config soup.yaml` first and read the
 [v0.77.0 release notes](https://github.com/MakazhanAlpamys/Soup/releases/tag/v0.77.0).

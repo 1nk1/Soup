@@ -94,7 +94,7 @@ yerine altyapıyla boğuşarak geçiriyor. Soup bunu çözer.
 ## Yenilikler
 
 **v0.77.1 — bir yama: `soup data` girdisini koruyor, `soup plan` `soup train` ile aynı kararı veriyor
-ve GRPO Apple Silicon'da eğitiliyor.** v0.77.0'daki her şey değişmeden kalıyor. O sürüm, v0.76'nın
+ve GRPO Apple Silicon'da eğitiliyor.** v0.77.0'daki hiçbir şey geri alınmıyor. O sürüm, v0.76'nın
 uyardığı ya da yok saydığı ayarları reddediyor; bu yüzden v0.76'da yüklenen bir yapılandırma artık
 yüklenmeyebilir: 0.76.x'ten geliyorsanız önce `soup doctor --config soup.yaml` komutunu çalıştırın ve
 [v0.77.0 sürüm notlarını](https://github.com/MakazhanAlpamys/Soup/releases/tag/v0.77.0) okuyun.
