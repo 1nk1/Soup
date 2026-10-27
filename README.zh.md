@@ -107,7 +107,8 @@ v0.76 上能加载的配置可能无法加载：从 0.76.x 升级时，请先运
   实测运行上完成校准（[记录](benchmarks/gate-2049-resident-vram.md)）。在估算的校准范围内（约 3.5B
   参数及以下的稠密模型），预检现在会拒绝一部分以前放行的长序列、大词表运行，`--allow-oom-attempt`
   仍可启动它们；超出该范围（更大的模型或混合专家模型、`medium` 或 `selective` 检查点、
-  `use_liger` / `use_cut_ce`、`backend: unsloth`）时，预检会把估算作为警告打印出来，并启动运行。
+  `use_liger` / `use_cut_ce`、`backend: unsloth`）时，放不下的运行会得到一条估算警告并照常启动；但如果
+  仅权重和 CUDA 上下文就超过显卡容量，该运行在范围外同样会被拒绝，`--allow-oom-attempt` 仍可启动它。
 - **外部程序通过在 `PATH` 上找到的绝对路径启动。** 不再搜索当前目录和相对的 `PATH` 条目：只存在于
   那里的工具，需要把所在目录加入 `PATH`。
 - **其他新内容。** `soup ship --progress jsonl`；按其他库的命名方式写的未知配置键，会提示对应的 Soup

@@ -115,8 +115,9 @@ yüklenmeyebilir: 0.76.x'ten geliyorsanız önce `soup doctor --config soup.yaml
   3.5B parametreye kadar yoğun modellerde, ön kontrol artık daha önce geçirdiği bazı uzun dizili, büyük
   sözlüklü çalıştırmaları reddediyor; `--allow-oom-attempt` onları yine de başlatıyor. Bu aralığın
   dışında (daha büyük ya da mixture-of-experts bir model, `medium` ya da `selective` checkpointing,
-  `use_liger` / `use_cut_ce`, `backend: unsloth`) tahmini bir uyarı olarak yazdırıyor ve çalıştırmayı
-  başlatıyor.
+  `use_liger` / `use_cut_ce`, `backend: unsloth`) sığmayan bir çalıştırma için tahmini bir uyarı olarak
+  yazdırıyor ve çalıştırmayı başlatıyor; ancak yalnızca ağırlıklar ve CUDA bağlamı kartın kapasitesini
+  aşıyorsa o çalıştırma orada da reddediliyor ve `--allow-oom-attempt` onu yine de başlatıyor.
 - **Harici programlar `PATH` üzerinde bulunan mutlak bir yolla başlatılıyor.** Geçerli dizin ve göreli
   `PATH` girdileri artık aranmıyor: yalnızca orada bulunan bir aracın dizinini `PATH`'e ekleyin.
 - **Ayrıca yeni.** `soup ship --progress jsonl`; başka bir kütüphanenin adlandırdığı biçimde yazılmış

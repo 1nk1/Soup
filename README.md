@@ -112,8 +112,10 @@ coming from 0.76.x, run `soup doctor --config soup.yaml` first and read the
   models up to about 3.5B parameters, the range it was fitted on, the pre-flight now refuses
   some long-sequence, large-vocabulary runs it let through, and `--allow-oom-attempt` still
   launches them. Outside that range (a larger or mixture-of-experts model, `medium` or
-  `selective` checkpointing, `use_liger` / `use_cut_ce`, `backend: unsloth`) it prints the
-  estimate as a warning and starts the run.
+  `selective` checkpointing, `use_liger` / `use_cut_ce`, `backend: unsloth`) a run that does
+  not fit gets the estimate as a warning and starts, unless its weights and the CUDA context
+  alone are more than the card holds: that run is refused there too, and
+  `--allow-oom-attempt` still launches it.
 - **External programs start by an absolute path found on `PATH`.** The current directory and
   relative `PATH` entries are no longer searched: a tool that only lives there needs its
   directory on `PATH`.
