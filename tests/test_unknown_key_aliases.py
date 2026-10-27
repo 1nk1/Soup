@@ -223,6 +223,88 @@ class TestNearIdenticalTyposOnly:
                 assert len(unknown) == 1
                 assert unknown[0].alias is None, path
 
+    @pytest.mark.parametrize(
+        ("one_edit", "two_edits", "alias", "target"),
+        [
+            (
+                "per_devce_trai_batc_sze",
+                "pr_devce_trai_batc_sze",
+                "per_device_train_batch_size",
+                "training.batch_size",
+            ),
+            ("num_trai_epoch", "num_trin_epoc", "num_train_epochs", "training.epochs"),
+        ],
+    )
+    def test_a_key_just_below_the_cutoff_does_not_say_use(
+        self, one_edit, two_edits, alias, target
+    ):
+        # Same words, spelled alike in both keys: only the whole-string cutoff (0.9) tells
+        # the key that says "use X" from the one that does not.
+        from difflib import SequenceMatcher
+
+        def ratio(left: str, right: str) -> float:
+            return SequenceMatcher(None, left, right).ratio()
+
+        assert ratio(one_edit, alias) >= 0.9
+        assert 0.85 <= ratio(two_edits, alias) < 0.9
+        for word, other in zip(two_edits.split("_"), alias.split("_")):
+            assert ratio(word, other) >= 0.8, (word, other)
+        assert len(two_edits.split("_")) == len(alias.split("_"))
+
+        for key, says_use in ((one_edit, True), (two_edits, False)):
+            for raw, path in (
+                (_raw_with_training(**{key: 1}), f"training.{key}"),
+                (_raw_with_root(**{key: 1}), key),
+            ):
+                unknown = [item for item in find_unknown_config_keys(raw) if item.path == path]
+                assert len(unknown) == 1, path
+                message = format_unknown_keys(unknown, include_deadline=False)
+                if says_use:
+                    assert unknown[0].alias == target, path
+                    assert f"use {target}" in message, path
+                else:
+                    assert unknown[0].alias is None, path
+                    assert "use " not in message, path
+                    assert target not in message, path
+
+
+    def test_a_one_letter_substitution_in_a_short_alias_never_says_use(self):
+        # "epochz" is 0.83 similar to the alias "epochs": under the 0.9 string cutoff.
+        from difflib import SequenceMatcher
+
+        assert 0.7 <= SequenceMatcher(None, "epochz", "epochs").ratio() < 0.9
+        under_training = find_unknown_config_keys(_raw_with_training(epochz=1))
+        assert len(under_training) == 1
+        assert under_training[0].alias is None
+        message = format_unknown_keys(under_training, include_deadline=False)
+        assert "did you mean 'epochs'" in message
+        assert "use " not in message
+
+        at_root = find_unknown_config_keys(_raw_with_root(epochz=1))
+        assert len(at_root) == 1
+        assert at_root[0].alias is None
+        assert "use " not in format_unknown_keys(at_root, include_deadline=False)
+
+
+class TestDottedKeysAtTheRoot:
+    """A literal ``training.<key>`` at the top level matches the alias table's exact path."""
+
+    @pytest.mark.parametrize(
+        ("key", "target"),
+        [
+            ("training.grad_accum_steps", "training.gradient_accumulation_steps"),
+            ("training.warmup_steps_ratio", "training.warmup_ratio"),
+        ],
+    )
+    def test_the_exact_path_says_use_the_aliased_field(self, key, target):
+        raw = _raw_with_root(**{key: 1})
+        unknown = find_unknown_config_keys(raw)
+        assert len(unknown) == 1, unknown
+        assert unknown[0].path == key
+        assert unknown[0].alias == target
+        assert unknown[0].suggestions == (target.split(".")[-1],)
+        assert _hint(raw, path=key) == f"unknown config key <key> - use {target}. Refused."
+
 
 class TestNamesThatAreNotTheTrainingSettings:
     """HF names that look like an alias but mean something else get their own answer."""
