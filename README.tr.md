@@ -111,8 +111,12 @@ yüklenmeyebilir: 0.76.x'ten geliyorsanız önce `soup doctor --config soup.yaml
   adaptörlerinden Torch olmadan üretim yapıyor.
 - **Tek bir tepe VRAM tahmini:** `soup train`'in ön kontrolü, `soup profile` ve `soup plan` aynı
   tahmini kullanıyor; tahmin 39 ölçülmüş çalıştırmayla kalibre edildi
-  ([kayıt](benchmarks/gate-2049-resident-vram.md)). Ön kontrol artık daha önce geçirdiği bazı uzun
-  dizili, büyük sözlüklü çalıştırmaları reddediyor; `--allow-oom-attempt` onları yine de başlatıyor.
+  ([kayıt](benchmarks/gate-2049-resident-vram.md)). Tahminin kalibre edildiği aralıkta, yani yaklaşık
+  3.5B parametreye kadar yoğun modellerde, ön kontrol artık daha önce geçirdiği bazı uzun dizili, büyük
+  sözlüklü çalıştırmaları reddediyor; `--allow-oom-attempt` onları yine de başlatıyor. Bu aralığın
+  dışında (daha büyük ya da mixture-of-experts bir model, `medium` ya da `selective` checkpointing,
+  `use_liger` / `use_cut_ce`, `backend: unsloth`) tahmini bir uyarı olarak yazdırıyor ve çalıştırmayı
+  başlatıyor.
 - **Harici programlar `PATH` üzerinde bulunan mutlak bir yolla başlatılıyor.** Geçerli dizin ve göreli
   `PATH` girdileri artık aranmıyor: yalnızca orada bulunan bir aracın dizinini `PATH`'e ekleyin.
 - **Ayrıca yeni.** `soup ship --progress jsonl`; başka bir kütüphanenin adlandırdığı biçimde yazılmış

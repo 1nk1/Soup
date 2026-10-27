@@ -108,9 +108,12 @@ coming from 0.76.x, run `soup doctor --config soup.yaml` first and read the
   `format` reward. `soup infer --backend mlx` generates from MLX bases and native text LoRA
   adapters without Torch.
 - **One peak-VRAM estimate** for `soup train`'s pre-flight, `soup profile` and `soup plan`,
-  calibrated on 39 measured runs ([record](benchmarks/gate-2049-resident-vram.md)). The
-  pre-flight now refuses some long-sequence, large-vocabulary runs it let through;
-  `--allow-oom-attempt` still launches them.
+  calibrated on 39 measured runs ([record](benchmarks/gate-2049-resident-vram.md)). For dense
+  models up to about 3.5B parameters, the range it was fitted on, the pre-flight now refuses
+  some long-sequence, large-vocabulary runs it let through, and `--allow-oom-attempt` still
+  launches them. Outside that range (a larger or mixture-of-experts model, `medium` or
+  `selective` checkpointing, `use_liger` / `use_cut_ce`, `backend: unsloth`) it prints the
+  estimate as a warning and starts the run.
 - **External programs start by an absolute path found on `PATH`.** The current directory and
   relative `PATH` entries are no longer searched: a tool that only lives there needs its
   directory on `PATH`.
