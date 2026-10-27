@@ -171,7 +171,7 @@ an existing config.
 
 - `gradient_checkpointing` in `soup profile --json` and in the MCP `profile` result is the config's own value again, and the new `gradient_checkpointing_tier` (`off`, `full`, `medium` or `selective`) is the tier the estimate priced (release fix)
 
-- A malformed model `config.json` or `.safetensors` header, or a figure no model has, is treated as an unreadable `config.json` by the VRAM pre-flight, `soup plan`, `soup profile` and the MCP `profile` tool (the shape is guessed and the output says so), and a malformed native adapter `adapter_config.json` is refused by `soup infer --backend mlx` with a message naming the file (release fix)
+- A malformed model `config.json` or `.safetensors` header, or a figure no model has, is treated as an unreadable `config.json` by the VRAM pre-flight, `soup plan`, `soup profile` and the MCP `profile` tool (`soup profile` prices a guessed shape and says so; `soup plan` records that it could not price the run), and a malformed native adapter `adapter_config.json` is refused by `soup infer --backend mlx` with a message naming the file (release fix)
 
 - A mixture-of-experts model known only by its cached `config.json` is priced with all its experts instead of as a dense model of a few billion parameters; the estimate's note says the count is approximate (release fix)
 
