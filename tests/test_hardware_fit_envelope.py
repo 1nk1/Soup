@@ -1,11 +1,13 @@
-"""The train pre-flight refuses only inside the range its coefficients were fitted on.
+"""The train pre-flight refuses a peak that does not fit only inside the range it was fitted on.
 
 The VRAM estimate (``utils/vram_estimate.py``) is fitted on dense models of 3B and
 below on one 6 GB card (``benchmarks/gate-2049-resident-vram.md``). Outside that range
 (a larger model, a mixture-of-experts model, ``medium`` / ``selective`` checkpointing,
 a fused-loss flag, ``backend: unsloth``) an estimate that does not fit is printed as a
 warning and the run continues; inside it the refusal stays and names
-``--allow-oom-attempt``.
+``--allow-oom-attempt``. Outside it a run is still refused when its floor alone, the
+weights, the CUDA context and the state of the parameters it trains, is more than the card
+holds: those terms are byte counts, not fitted coefficients.
 
 No GPU here: the gate is called with a card size, and the model's ``config.json`` is
 replaced by the dict a Hub lookup would return.
@@ -52,6 +54,32 @@ _SMALL = {
     "tie_word_embeddings": True,
 }
 _SMALL_PARAMS = 494_032_768
+
+# Llama-2-7B: 6.74B parameters; a full fine-tune holds 27 GB of fp32 weights and as much
+# again in gradients.
+_LLAMA_7B = {
+    "model_type": "llama",
+    "hidden_size": 4096,
+    "num_hidden_layers": 32,
+    "num_attention_heads": 32,
+    "num_key_value_heads": 32,
+    "intermediate_size": 11008,
+    "vocab_size": 32000,
+}
+_LLAMA_7B_PARAMS = 6_738_415_616
+
+# Qwen3-4B: 4.02B parameters, the next size up from the calibrated range.
+_QWEN_4B = {
+    "model_type": "qwen3",
+    "hidden_size": 2560,
+    "num_hidden_layers": 36,
+    "num_attention_heads": 32,
+    "num_key_value_heads": 8,
+    "intermediate_size": 9728,
+    "vocab_size": 151936,
+    "tie_word_embeddings": True,
+}
+_QWEN_4B_PARAMS = 4_022_468_096
 
 # Llama-3.1-70B: 70.55B parameters; its 4-bit weights alone are about 35 GB.
 _LLAMA_70B = {
@@ -290,23 +318,171 @@ class TestWeightsThatDoNotFitTheCard:
     @pytest.mark.parametrize(
         ("factor", "refused"), [(0.99, True), (1.01, False)], ids=["just-below", "just-above"]
     )
-    def test_the_line_is_the_weights_plus_context_and_not_the_whole_peak(
+    def test_the_line_is_the_floor_and_not_the_whole_peak(
         self, shape_of, screen, factor, refused
     ):
         shape_of(_LLAMA_8B, _LLAMA_8B_PARAMS)
         text = _yaml(gradient_checkpointing=True)
         inp = train_mod._build_hardware_fit_input(load_config_from_string(text))
         parts = hardware_fit.estimate_peak_vram_gb(inp)
-        exact_gb = parts.weights_gb + OVERHEAD_FIXED_BYTES / GB
-        # Both cards are below the peak, so only the weights-and-context line tells them apart.
-        assert parts.total_gb * 1.1 > exact_gb * 1.01 + 0.5
-        card = {"memory_total_bytes": int(exact_gb * factor * 1e9)}
+        # Weights, the CUDA context, and the adapters with their gradients and optimizer state.
+        floor_gb = (
+            parts.weights_gb + OVERHEAD_FIXED_BYTES / GB
+            + parts.adapters_gb + parts.gradients_gb + parts.optimizer_gb
+        )
+        # Both cards are below the peak, so only the floor tells them apart; and the floor is
+        # more than the weights and the context alone, which the first cases above price.
+        assert parts.total_gb * 1.1 > floor_gb * 1.01 + 0.5
+        assert floor_gb > parts.weights_gb + OVERHEAD_FIXED_BYTES / GB + 0.1
+        card = {"memory_total_bytes": int(floor_gb * factor * 1e9)}
         assert _run(text, card=card) == (1 if refused else None)
         shown = screen()
         assert ("Hardware-fit gate" in shown) is refused
         assert ("Hardware-fit warning" in shown) is not refused
         assert ("not an extrapolation" in shown) is refused
         assert (OVERSTATE in shown) is not refused
+
+
+_FULL = {"quantization": "none", "lora": {"r": 0}}
+
+#: (model, parameters, training, card in bytes, what the refusal says the floor is made of)
+_TRAINED_STATE_DOES_NOT_FIT = [
+    pytest.param(
+        _LLAMA_7B, _LLAMA_7B_PARAMS, _FULL, 80e9,
+        "weights, CUDA context, gradients and optimizer state",
+        id="llama-7b-full-adamw-on-80-gb",
+    ),
+    pytest.param(
+        _LLAMA_7B, _LLAMA_7B_PARAMS, _FULL, 40e9,
+        "weights, CUDA context, gradients and optimizer state",
+        id="llama-7b-full-adamw-on-40-gb",
+    ),
+    pytest.param(
+        _QWEN_4B, _QWEN_4B_PARAMS, _FULL, 24e9,
+        "weights, CUDA context, gradients and optimizer state",
+        id="qwen-4b-full-adamw-on-24-gb",
+    ),
+    pytest.param(
+        _LLAMA_7B, _LLAMA_7B_PARAMS, {**_FULL, "optimizer": "sgd"}, 40e9,
+        "weights, CUDA context and gradients",
+        id="llama-7b-full-sgd-on-40-gb",
+    ),
+    pytest.param(
+        _LLAMA_7B, _LLAMA_7B_PARAMS, {**_FULL, "optimizer": "adalomo"}, 38e9,
+        "weights, CUDA context and optimizer state",
+        id="llama-7b-full-adalomo-on-38-gb",
+    ),
+    pytest.param(
+        _LLAMA_7B, _LLAMA_7B_PARAMS, {**_FULL, "optimizer": "adamw_bnb_8bit"}, 60e9,
+        "weights, CUDA context, gradients and optimizer state",
+        id="llama-7b-full-8bit-adamw-on-60-gb",
+    ),
+]
+
+#: Runs whose floor fits although the peak does not: the warning, and the run starts.
+_FLOOR_FITS = [
+    pytest.param(
+        _LLAMA_7B, _LLAMA_7B_PARAMS, {"quantization": "none", "batch_size": 8}, 80e9,
+        id="llama-7b-lora-on-80-gb",
+    ),
+    pytest.param(
+        _QWEN_4B, _QWEN_4B_PARAMS, {"quantization": "none"}, 24e9, id="qwen-4b-lora-on-24-gb"
+    ),
+    # Fused into the backward pass: no full gradient is held, though the estimate charges one.
+    pytest.param(
+        _LLAMA_7B, _LLAMA_7B_PARAMS, {**_FULL, "optimizer": "lomo"}, 40e9,
+        id="llama-7b-full-lomo-on-40-gb",
+    ),
+    # An optimizer the estimate has no figure for is priced as AdamW: no state term.
+    pytest.param(
+        _LLAMA_7B, _LLAMA_7B_PARAMS, {**_FULL, "optimizer": "apollo_adamw"}, 60e9,
+        id="llama-7b-full-apollo-on-60-gb",
+    ),
+    # A paged optimizer moves its state to host memory under pressure: no state term.
+    pytest.param(
+        _LLAMA_7B, _LLAMA_7B_PARAMS, {**_FULL, "optimizer": "paged_adamw_8bit"}, 60e9,
+        id="llama-7b-full-paged-8bit-adamw-on-60-gb",
+    ),
+    # These train a subset of the parameters but are priced as fully trainable.
+    pytest.param(
+        _LLAMA_7B, _LLAMA_7B_PARAMS, {"quantization": "none", "lisa_enabled": True}, 40e9,
+        id="llama-7b-lisa-on-40-gb",
+    ),
+    pytest.param(
+        _LLAMA_7B, _LLAMA_7B_PARAMS,
+        {"quantization": "none", "unfrozen_parameters": ["model.layers.0.*"]}, 40e9,
+        id="llama-7b-spectrum-on-40-gb",
+    ),
+    pytest.param(
+        _LLAMA_7B, _LLAMA_7B_PARAMS, {**_FULL, "freeze_ratio": 0.5}, 40e9,
+        id="llama-7b-full-freeze-ratio-on-40-gb",
+    ),
+    pytest.param(
+        _LLAMA_7B, _LLAMA_7B_PARAMS, {**_FULL, "freeze_layers": 16}, 40e9,
+        id="llama-7b-full-freeze-layers-on-40-gb",
+    ),
+    pytest.param(
+        _LLAMA_7B, _LLAMA_7B_PARAMS,
+        {**_FULL, "expand_layers": 2, "freeze_trainable_layers": 2}, 40e9,
+        id="llama-7b-llama-pro-on-40-gb",
+    ),
+]
+
+
+class TestTheFloorIncludesWhatTheRunTrains:
+    """A full fine-tune holds gradients and optimizer state for every parameter it trains.
+
+    They are bytes per parameter times the parameter count, like the weights, so a run whose
+    weights fit the card but whose gradients and optimizer state do not is refused outside
+    the calibrated range as well. A LoRA run trains only its adapters, so the same model
+    with LoRA starts with the warning. Where the estimate prices more trainable state than
+    the run holds (a subset of the parameters, no full gradient, a state paged to the host)
+    the floor leaves that term out rather than refuse a run that could fit.
+    """
+
+    @pytest.mark.parametrize(
+        ("config", "params", "training", "card_bytes", "terms"), _TRAINED_STATE_DOES_NOT_FIT
+    )
+    def test_it_is_refused_although_the_weights_fit(
+        self, shape_of, screen, config, params, training, card_bytes, terms
+    ):
+        shape_of(config, params)
+        assert _run(_yaml(**training), card={"memory_total_bytes": int(card_bytes)}) == 1
+        text = screen()
+        assert "Hardware-fit gate" in text
+        assert OUTSIDE in text
+        assert f"Its {terms} alone take" in text
+        assert "not an extrapolation" in text
+        assert OVERSTATE not in text
+        assert "pass --allow-oom-attempt to try anyway" in text
+
+    @pytest.mark.parametrize(
+        ("config", "params", "training", "card_bytes", "terms"), _TRAINED_STATE_DOES_NOT_FIT
+    )
+    def test_allow_oom_attempt_still_launches_it(
+        self, shape_of, screen, config, params, training, card_bytes, terms
+    ):
+        shape_of(config, params)
+        card = {"memory_total_bytes": int(card_bytes)}
+        assert _run(_yaml(**training), card=card, allow_oom_attempt=True) is None
+        text = screen()
+        assert "Hardware-fit warning" in text
+        assert "--allow-oom-attempt set: launching anyway." in text
+        assert "not an extrapolation" in text
+
+    @pytest.mark.parametrize(("config", "params", "training", "card_bytes"), _FLOOR_FITS)
+    def test_it_starts_with_the_warning_when_the_floor_fits(
+        self, shape_of, screen, config, params, training, card_bytes
+    ):
+        shape_of(config, params)
+        assert _run(_yaml(**training), card={"memory_total_bytes": int(card_bytes)}) is None
+        text = screen()
+        assert "Hardware-fit warning" in text
+        assert "Hardware-fit gate" not in text
+        assert "Predicted peak VRAM" in text
+        assert OVERSTATE in text
+        assert "Warning only: launching anyway." in text
+        assert "not an extrapolation" not in text
 
 
 class TestTheRangeCheck:

@@ -408,23 +408,22 @@ def _hardware_fit_preflight(cfg, gpu_info, *, allow_oom_attempt: bool) -> None:
         VRAM_SAFETY_MARGIN,
         decide_hardware_fit,
         outside_calibrated_range,
+        unextrapolated_floor,
     )
-    from soup_cli.utils.vram_estimate import GB, OVERHEAD_FIXED_BYTES
 
     report = decide_hardware_fit(inp, available_vram_gb=total_bytes / 1e9)
     if report.ok:
         return
     b = report.breakdown
     # The estimate is fitted on one range of runs; beyond it the same numbers are an
-    # extrapolation, so they are a warning there and a refusal only inside it. The weights
-    # (bytes per parameter times the parameter count) and the CUDA context are not
-    # extrapolated, so a run whose weights and context alone do not fit the card is
-    # refused outside the range too. The estimate's `overhead` term is not that context:
-    # it adds 5% of the whole allocated peak, activations included.
+    # extrapolation, so they are a warning there and a refusal only inside it. The weights,
+    # the CUDA context and the state of the parameters the run trains (adapters, gradients,
+    # optimizer) are bytes per parameter times a count, not extrapolated, so a run whose
+    # floor alone does not fit the card is refused outside the range too.
     outside = outside_calibrated_range(inp, backend=getattr(cfg, "backend", None))
-    exact_gb = b.weights_gb + OVERHEAD_FIXED_BYTES / GB
-    weights_exceed_card = exact_gb > report.available_vram_gb
-    refuse = not allow_oom_attempt and (not outside or weights_exceed_card)
+    floor_gb, floor_terms = unextrapolated_floor(cfg, inp, b)
+    floor_exceeds_card = floor_gb > report.available_vram_gb
+    refuse = not allow_oom_attempt and (not outside or floor_exceeds_card)
     # #1631: a "quantized" run priced like an unquantized one needs a word why.
     dequantized = _HW_FIT_DEQUANTIZED_ON_LOAD.get(inp.quant)
     note = (
@@ -460,10 +459,11 @@ def _hardware_fit_preflight(cfg, gpu_info, *, allow_oom_attempt: bool) -> None:
     else:
         tail = "[yellow]Warning only: launching anyway.[/]"
     # Where this run sits against what the estimate was fitted on.
-    if outside and weights_exceed_card:
+    if outside and floor_exceeds_card:
+        floor_names = f"{', '.join(floor_terms[:-1])} and {floor_terms[-1]}"
         footnote += (
             f"\n[dim]This run is outside the calibrated range ({CALIBRATED_RANGE}): "
-            f"{', '.join(outside)}. Its weights and CUDA context alone take {exact_gb:.1f} GB, "
+            f"{', '.join(outside)}. Its {floor_names} alone take {floor_gb:.1f} GB, "
             "more than the card has; that part is not an extrapolation.[/]"
         )
     elif outside:

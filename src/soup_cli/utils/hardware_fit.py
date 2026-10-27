@@ -19,6 +19,8 @@ Public surface:
 - ``VRAMBreakdown`` frozen dataclass + ``total_gb`` property.
 - ``HardwareFitReport`` frozen dataclass.
 - ``estimate_peak_vram_gb(inp)`` -> ``VRAMBreakdown``.
+- ``unextrapolated_floor(cfg, inp, breakdown)`` -> what the run needs on the card whatever
+  its activations are (weights, CUDA context, trained-parameter state), and what that is.
 - ``decide_hardware_fit(inp, *, available_vram_gb)`` -> ``HardwareFitReport``.
 - ``resolve_peft_mode(cfg, quant=None)`` -> ``str``.
 - ``hardware_fit_input_from_config(cfg, ...)`` -> ``HardwareFitInput | None``.
@@ -35,6 +37,7 @@ from soup_cli.utils.vram_estimate import (
     BYTES_PER_PARAM_BY_QUANT,
     GB,
     OPTIMIZER_BYTES_PER_PARAM,
+    OVERHEAD_FIXED_BYTES,
     VRAM_SAFETY_MARGIN,
     RunSpec,
     VramEstimate,
@@ -293,10 +296,11 @@ def outside_calibrated_range(
 ) -> tuple[str, ...]:
     """Why ``inp`` is outside the range the estimate was fitted on; empty when inside.
 
-    The pre-flight refuses a run only inside it. Outside it the same numbers are an
-    extrapolation (a larger model, a mixture-of-experts one, a checkpointing tier or
-    fused loss nobody measured, or a backend with its own loss and checkpointing), so
-    they are printed as a warning and the run continues.
+    The pre-flight refuses a peak that does not fit only inside it. Outside it the same
+    numbers are an extrapolation (a larger model, a mixture-of-experts one, a checkpointing
+    tier or fused loss nobody measured, or a backend with its own loss and checkpointing),
+    so they are printed as a warning and the run continues, unless the run's floor
+    (:func:`unextrapolated_floor`) is already more than the card holds.
     """
     reasons = []
     if inp.params_b > CALIBRATED_MAX_PARAMS_B:
@@ -311,6 +315,67 @@ def outside_calibrated_range(
     if backend == "unsloth":
         reasons.append("backend unsloth")
     return tuple(reasons)
+
+
+#: Optimizers that update each parameter inside the backward pass, so no full gradient
+#: is ever held (the estimate still charges one).
+_FUSED_BACKWARD_OPTIMIZERS = frozenset({"lomo", "adalomo"})
+
+
+def _trains_a_subset(tcfg: Any) -> bool:
+    """Whether a full fine-tune trains only some of the parameters (Spectrum, LISA, freezing)."""
+    return bool(
+        getattr(tcfg, "unfrozen_parameters", None)
+        or getattr(tcfg, "lisa_enabled", False)
+        or getattr(tcfg, "freeze_layers", None)
+        or getattr(tcfg, "freeze_ratio", None)
+        or getattr(tcfg, "expand_layers", None)
+    )
+
+
+def unextrapolated_floor(
+    cfg: Any, inp: HardwareFitInput, breakdown: VRAMBreakdown
+) -> tuple[float, tuple[str, ...]]:
+    """What the run needs on the card whatever its activations are, in GB, and its terms.
+
+    Only the estimate's terms that are a byte count per parameter times a parameter count,
+    or a constant: the weights, the CUDA context (the fixed 0.5 GB, not the ``overhead``
+    term, which adds 5% of every allocated byte, activations included) and, for the
+    parameters the run trains, their adapters, gradients and optimizer state. None of
+    them uses a fitted coefficient, so a run whose floor is more than the card holds
+    fails outside the calibrated range as surely as inside it. Activations, logits, the
+    4-bit dequantization copy and the allocator slack never enter it.
+
+    The trained-parameter terms are left out wherever the estimate overstates them,
+    so the floor never refuses a run that could fit:
+
+    - Spectrum (``unfrozen_parameters``), LISA, ``freeze_layers`` / ``freeze_ratio`` and
+      ``expand_layers`` train a subset of the parameters, but ``resolve_peft_mode`` prices
+      every parameter as trainable: weights and context only.
+    - ``lomo`` / ``adalomo`` keep no full gradient: no gradient term.
+    - An optimizer the estimate has no figure for (it prices it as AdamW), and a paged
+      optimizer, whose state moves to host memory under pressure: no optimizer term.
+    """
+    floor = breakdown.weights_gb + OVERHEAD_FIXED_BYTES / GB
+    terms = ["weights", "CUDA context"]
+    tcfg = getattr(cfg, "training", None)
+    if inp.peft == "full" and _trains_a_subset(tcfg):
+        return floor, tuple(terms)
+    optimizer = str(getattr(tcfg, "optimizer", "adamw_torch") or "adamw_torch")
+    charges = [
+        ("adapters", breakdown.adapters_gb, True),
+        ("gradients", breakdown.gradients_gb, optimizer not in _FUSED_BACKWARD_OPTIMIZERS),
+        (
+            "optimizer state",
+            breakdown.optimizer_gb,
+            optimizer in OPTIMIZER_BYTES_PER_PARAM and "paged" not in optimizer,
+        ),
+    ]
+    for name, gigabytes, exact in charges:
+        if exact and gigabytes > 0:
+            floor += gigabytes
+            terms.append(name)
+    return floor, tuple(terms)
 
 #: Tasks whose model has no vocabulary-sized output, so the estimate charges no
 #: logits: the classifier family and reward_model load

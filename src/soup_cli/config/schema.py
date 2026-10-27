@@ -9823,7 +9823,8 @@ output: ./output
 #
 # The VRAM pre-flight prices the full logits over a 128k-token sequence, which is far
 # more than one card holds. This model is outside the range that estimate was fitted
-# on, so it prints that figure as a warning and launches anyway; it does not refuse.
+# on, so it prints that figure as a warning and launches anyway, unless its weights and
+# training state (adapters, gradients, optimizer) alone do not fit the card.
 # To avoid building the full logits, uncomment use_liger below (pip install
 # "soup-cli[liger]"); the pre-flight still warns, as it cannot know the fused loss applies.
 
