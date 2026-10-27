@@ -20,6 +20,7 @@ from soup_cli.utils.profiler import (
     recommend_batch_size,
     recommend_gpu,
 )
+from soup_cli.utils.terminal import for_terminal
 from soup_cli.utils.vram_estimate import VRAM_SAFETY_MARGIN, fit_verdict
 
 console = Console()
@@ -142,7 +143,7 @@ def _render_profile(result: dict, cfg, gpu_memory_gb: float, gpu_memory_source: 
         targets = ", ".join(result.get("lora_targets", []))
         trainable_str = (
             f"(trainable: {result['trainable_params']:,.0f} with LoRA r={cfg.training.lora.r}"
-            + (f" on {escape(targets)})" if targets else ")")
+            + (f" on {for_terminal(targets)})" if targets else ")")
         )
 
     model_info = (
