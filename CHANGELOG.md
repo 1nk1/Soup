@@ -31,10 +31,14 @@ an existing config.
   or relative `PATH` entries are not searched, and on Windows `soup` leaves the current directory
   out of the program search for itself and the programs it starts. A tool found only there needs
   its directory on `PATH` as an absolute path, or its own path (#2205, #2213).
-- **The VRAM pre-flight prices runs with the shared estimate.** It refuses some long-sequence,
-  large-vocabulary runs and some runs without gradient checkpointing that it let through;
-  `--allow-oom-attempt` still launches them. Reading a Hub model's shape can reach the Hub unless
-  `HF_HUB_OFFLINE` or `TRANSFORMERS_OFFLINE` is set (#2146 by @abdulwaarith0).
+- **The VRAM pre-flight prices runs with the shared estimate.** Inside the range the estimate
+  was fitted on (dense models of 3B and below on one 6 GB card) it refuses some long-sequence,
+  large-vocabulary runs and some runs without gradient checkpointing that it let through, and
+  `--allow-oom-attempt` still launches them. Outside that range (a larger model, a
+  mixture-of-experts model, `medium` or `selective` checkpointing, `use_liger` or `use_cut_ce`,
+  `backend: unsloth`) a run that does not fit gets the estimate as a warning and starts. Reading
+  a Hub model's shape can reach the Hub unless `HF_HUB_OFFLINE` or `TRANSFORMERS_OFFLINE` is
+  set (#2146 by @abdulwaarith0).
 - **`/v1/tools/python` answers `timed_out: false` for a failure that is not a timeout**, with the
   process output (#2204 by @Nari-Ab).
 
@@ -73,7 +77,7 @@ an existing config.
 
 - Clarify that training.curriculum_dynamic and its tuning fields track online uncertainty telemetry for curve inspection without modifying batch sample composition (Refs #808 by @Nari-Ab in #2142).
 
-- **One peak-VRAM estimate for `soup train`'s pre-flight, `soup profile`, the MCP `profile` tool and `soup plan` (#2049 by @abdulwaarith0 in #2146).** The pre-flight and `soup profile` priced the same run with two formulas in two units, and neither charged the logits and loss chain, which decides long, large-vocabulary runs. All four now use `utils/vram_estimate.py`, which reads the model's `config.json` and safetensors headers (never the weights) and prices weights, adapters, gradients, optimizer state, activations, logits, the 4-bit dequantization copy and overhead, calibrated on 39 measured runs (`benchmarks/gate-2049-resident-vram.md`). The pre-flight now refuses some long-sequence, large-vocabulary runs and some runs without gradient checkpointing that it let through; `--allow-oom-attempt` still launches them. Tasks without an LM head (`classifier`, `reranker`, `cross_encoder`, `embedding`, `reward_model`) are charged no logits; with `use_liger` or `use_cut_ce` the logits are still charged and the output says the fused loss may not build them. `gradient_checkpointing` is priced as the trainer applies it: `auto` resolves on the card as the `sft` trainer does, `selective` is priced as no checkpointing (an upper bound), and tasks other than `sft` and `tts` checkpoint fully. `soup profile`'s numbers change, and its JSON gains the exact bytes per term, the fit verdict and where the model's shape came from. `gradient_checkpointing` in that JSON (and in the MCP `profile` result) stays the config's own value (`true`, `false`, `"auto"` or a tier name), and the new `gradient_checkpointing_tier` (`off`, `full`, `medium` or `selective`) is the tier the estimate priced. Reading a Hub model's shape can now reach the Hub from the pre-flight, `soup profile` and `soup plan` (which prints a dim line before it does; `soup apply` compares hashes only and does not read the model), and writes its `config.json` into the Hugging Face cache, unless `HF_HUB_OFFLINE` or `TRANSFORMERS_OFFLINE` is set; the MCP `profile` tool reads only a local directory or the local cache. A Hub model with no readable `config.json` is priced from a shape guessed from its name. `soup plan` records `peak_vram_gb: null` with a `peak_vram_reason` when it cannot price the run, instead of a fixed 8.0 GB; a state file written before this still loads.
+- **One peak-VRAM estimate for `soup train`'s pre-flight, `soup profile`, the MCP `profile` tool and `soup plan` (#2049 by @abdulwaarith0 in #2146).** The pre-flight and `soup profile` priced the same run with two formulas in two units, and neither charged the logits and loss chain, which decides long, large-vocabulary runs. All four now use `utils/vram_estimate.py`, which reads the model's `config.json` and safetensors headers (never the weights) and prices weights, adapters, gradients, optimizer state, activations, logits, the 4-bit dequantization copy and overhead, calibrated on 39 measured runs (`benchmarks/gate-2049-resident-vram.md`). Inside the range the estimate was fitted on (dense models of 3B and below on one 6 GB card), the pre-flight now refuses some long-sequence, large-vocabulary runs and some runs without gradient checkpointing that it let through, and `--allow-oom-attempt` still launches them; outside it (a larger model, a mixture-of-experts model, `medium` or `selective` checkpointing, `use_liger` or `use_cut_ce`, `backend: unsloth`) a run that does not fit gets the estimate as a warning, with a footnote saying the estimate may overstate the peak, and starts. Tasks without an LM head (`classifier`, `reranker`, `cross_encoder`, `embedding`, `reward_model`) are charged no logits; with `use_liger` or `use_cut_ce` the logits are still charged and the output says the fused loss may not build them. `gradient_checkpointing` is priced as the trainer applies it: `auto` resolves on the card as the `sft` trainer does, `selective` is priced as no checkpointing (an upper bound), and tasks other than `sft` and `tts` checkpoint fully. `soup profile`'s numbers change, and its JSON gains the exact bytes per term, the fit verdict and where the model's shape came from. `gradient_checkpointing` in that JSON (and in the MCP `profile` result) stays the config's own value (`true`, `false`, `"auto"` or a tier name), and the new `gradient_checkpointing_tier` (`off`, `full`, `medium` or `selective`) is the tier the estimate priced. Reading a Hub model's shape can now reach the Hub from the pre-flight, `soup profile` and `soup plan` (which prints a dim line before it does; `soup apply` compares hashes only and does not read the model), and writes its `config.json` into the Hugging Face cache, unless `HF_HUB_OFFLINE` or `TRANSFORMERS_OFFLINE` is set; the MCP `profile` tool reads only a local directory or the local cache. A Hub model with no readable `config.json` is priced from a shape guessed from its name. `soup plan` records `peak_vram_gb: null` with a `peak_vram_reason` when it cannot price the run, instead of a fixed 8.0 GB; a state file written before this still loads.
 
 - External programs that Soup starts (`nvidia-smi`, `sysctl`, the disk-probe tools, `git`, `ollama`,
   the llama.cpp binaries, `trtllm-build`, `docker`, the Modal CLI, `gh`, `ssh` / `scp` in the RunPod
@@ -101,6 +105,10 @@ an existing config.
   the directory on `PATH` as an absolute path. `soup adapters bisect --eval-command` is split with
   POSIX shell rules, so a Windows path there takes forward slashes or quotes: `.\tool.exe` reaches
   the program as `.tool.exe`. (#2213)
+
+- The VRAM pre-flight refuses a run that does not fit only inside the range its estimate was fitted on (dense models of 3B and below on one 6 GB card). Outside it, and for the shipped `longcontext` template (an 8B model), it prints the estimate as a warning and starts the run; inside it the refusal names `--allow-oom-attempt`. The `longcontext` template's header says what the pre-flight does and how to turn on `use_liger` (release fix)
+
+- `soup apply` no longer reads the model, since it compares hashes only, so it makes no request to the Hub; `soup plan` prints a dim line before the first request it sends (release fix)
 
 ### Fixed
 
@@ -141,7 +149,7 @@ an existing config.
 
 - Spike recovery hints now refuse symbolic-link targets and use atomic replacement, preserving other hard links and the previous hint on write failure without consuming an attempt (Refs #808 by @Nari-Ab in #2169).
 
-- In `soup serve`, `/v1/tools/python` now returns process stdout and stderr with `timed_out: true` and `exit_code: 124` for a timeout, and `timed_out: false` for other process failures (with `exit_code: 1` for output overflow). Tool authentication failures carry `WWW-Authenticate: Bearer` on every HTTP 401 response (#2194 by @Nari-Ab in #2204).
+- In `soup serve`, `/v1/tools/python` now returns `timed_out: true` and `exit_code: 124` with no output for a timeout, and `timed_out: false` with the process stdout and stderr for other process failures (with `exit_code: 1` for output overflow). Tool authentication failures carry `WWW-Authenticate: Bearer` on every HTTP 401 response (#2194 by @Nari-Ab in #2204).
 
 - **`soup plan` and `soup apply` refuse the configs `soup train` refuses.** They checked only for unknown keys, so a config with a staged field set (`training.early_stop_patience: 5`), a refused deprecated value (`data.remove_unused_columns: true`) or any other schema error got a plan (exit 0), and `soup apply` / `apply --dry-run` accepted it. Both commands now exit 1 with the `Config validation error:` lines `soup train` prints, write no plan and leave an existing state file unchanged. (#2242)
 
@@ -157,6 +165,20 @@ an existing config.
   default names are unchanged. (#2225, #2245)
 
 - `soup data lint`, `doctor`, `topics`, `from-traces`, `canary insert`, `sample`, `dedup`, `filter`, `convert`, `merge`, `active-sample`, `augment` and `evolve` refuse an output that names one of their inputs, before anything is read, instead of writing over it and exiting 0. The input can be named by `-o` under any spelling (`./x`, `sub/../x`, the absolute path, a case variant on Windows, a hard link or a symlink) or by a default output name the input already has (`merged.jsonl`, `prefs.jsonl`, `active_samples.jsonl`, `augmented.jsonl`). The message names both paths, for example `--output './d.jsonl' is the same file as the input 'd.jsonl'; choose a different --output`. `canary insert` also refuses a `--manifest` that is the dataset or the `--output` (#2226, #2261).
+
+- An unknown config key says `use X` only for a known foreign name and one-edit typos of it. `per_device_eval_batch_size`, `per_gpu_eval_batch_size`, `eval_batch_size`, `warmup_steps`, `warmup_step` and `learning_rate_decay` are no longer sent to a different setting: the first five get a sentence saying Soup has no such setting, and the top level and `training:` answer alike (release fix)
+
+- `gradient_checkpointing` in `soup profile --json` and in the MCP `profile` result is the config's own value again, and the new `gradient_checkpointing_tier` (`off`, `full`, `medium` or `selective`) is the tier the estimate priced (release fix)
+
+- A malformed model `config.json` or `.safetensors` header, or a figure no model has, is treated as an unreadable `config.json` by the VRAM pre-flight, `soup plan`, `soup profile` and the MCP `profile` tool (the shape is guessed and the output says so), and a malformed native adapter `adapter_config.json` is refused by `soup infer --backend mlx` with a message naming the file (release fix)
+
+- A mixture-of-experts model known only by its cached `config.json` is priced with all its experts instead of as a dense model of a few billion parameters; the estimate's note says the count is approximate (release fix)
+
+- `soup export` removes the temporary `.soup_merge_tmp_<adapter>/` directory only when that export created it, and says it left one that was already there (release fix)
+
+- `soup profile` prints the LoRA target modules, and `soup adapters bisect` the checkpoint ids, with control characters and bidi marks removed (release fix)
+
+- `soup infer --backend mlx` names the option it refuses (`--task`, `--batch-size` or `--cuda-graphs`) instead of listing all three (release fix)
 
 ## [0.77.0] - 2026-10-26
 
