@@ -183,6 +183,8 @@ an existing config.
 
 - `soup infer --backend mlx` names the option it refuses (`--task`, `--batch-size` or `--cuda-graphs`) instead of listing all three (release fix)
 
+- The test suite passes under pytest 9.2.0: a test of the Windows branch of `open_no_follow` faked `os.fstat` and `os.name` for the whole process, and pytest 9.2 reads its capture file through `os.fstat` before the fake is undone. The test now fakes Windows inside `soup_cli.utils.paths` only (#2286, reported by @abdulwaarith0; the test change comes from #2284 by @Nari-Ab)
+
 ## [0.77.0] - 2026-10-26
 
 ### Upgrade notes
