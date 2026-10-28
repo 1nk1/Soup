@@ -368,14 +368,28 @@ _TRAINED_STATE_DOES_NOT_FIT = [
         id="llama-7b-full-sgd-on-40-gb",
     ),
     pytest.param(
-        _LLAMA_7B, _LLAMA_7B_PARAMS, {**_FULL, "optimizer": "adalomo"}, 38e9,
-        "weights, CUDA context and optimizer state",
-        id="llama-7b-full-adalomo-on-38-gb",
-    ),
-    pytest.param(
         _LLAMA_7B, _LLAMA_7B_PARAMS, {**_FULL, "optimizer": "adamw_bnb_8bit"}, 60e9,
         "weights, CUDA context, gradients and optimizer state",
         id="llama-7b-full-8bit-adamw-on-60-gb",
+    ),
+    # Every AdamW the floor charges in full: the weights and gradients (54.4 GB) fit 80 GB,
+    # the 54 GB of AdamW state on top do not.
+    pytest.param(
+        _LLAMA_7B, _LLAMA_7B_PARAMS, {**_FULL, "optimizer": "adamw_torch_fused"}, 80e9,
+        "weights, CUDA context, gradients and optimizer state",
+        id="llama-7b-full-fused-adamw-on-80-gb",
+    ),
+    pytest.param(
+        _LLAMA_7B, _LLAMA_7B_PARAMS, {**_FULL, "optimizer": "schedule_free_adamw"}, 80e9,
+        "weights, CUDA context, gradients and optimizer state",
+        id="llama-7b-full-schedule-free-adamw-on-80-gb",
+    ),
+    # GaLore replaces the optimizer, so its state is not counted, but the full gradient is.
+    pytest.param(
+        _LLAMA_7B, _LLAMA_7B_PARAMS,
+        {**_FULL, "optimizer": "adamw_torch", "use_galore": True}, 50e9,
+        "weights, CUDA context and gradients",
+        id="llama-7b-full-galore-on-50-gb",
     ),
 ]
 
@@ -402,6 +416,30 @@ _FLOOR_FITS = [
     pytest.param(
         _LLAMA_7B, _LLAMA_7B_PARAMS, {**_FULL, "optimizer": "paged_adamw_8bit"}, 60e9,
         id="llama-7b-full-paged-8bit-adamw-on-60-gb",
+    ),
+    # The estimate's figure for these optimizers is more than they hold, so no state term.
+    # adalomo: no gradient either, so the weights and the context (27.5 GB) are the floor;
+    # with its 2 bytes a parameter of state it was 40.9 GB.
+    pytest.param(
+        _LLAMA_7B, _LLAMA_7B_PARAMS, {**_FULL, "optimizer": "adalomo"}, 38e9,
+        id="llama-7b-full-adalomo-on-38-gb",
+    ),
+    # Adafactor factors its second moment (the estimate charges 4 bytes a parameter): the
+    # floor is 32.7 GB; with the state it was 48.8 GB.
+    pytest.param(
+        _QWEN_4B, _QWEN_4B_PARAMS, {**_FULL, "optimizer": "adafactor"}, 42.5e9,
+        id="qwen-4b-full-adafactor-on-42-gb",
+    ),
+    # lion_8bit keeps one 8-bit moment (the estimate charges two): 54.4 GB, was 67.9 GB.
+    pytest.param(
+        _LLAMA_7B, _LLAMA_7B_PARAMS, {**_FULL, "optimizer": "lion_8bit"}, 60e9,
+        id="llama-7b-full-lion-8bit-on-60-gb",
+    ),
+    # GaLore swaps adamw_torch for galore_adamw, whose state is low-rank: 54.4 GB, was 108.3.
+    pytest.param(
+        _LLAMA_7B, _LLAMA_7B_PARAMS,
+        {**_FULL, "optimizer": "adamw_torch", "use_galore": True}, 60e9,
+        id="llama-7b-full-galore-adamw-on-60-gb",
     ),
     # These train a subset of the parameters but are priced as fully trainable.
     pytest.param(
@@ -436,9 +474,23 @@ class TestTheFloorIncludesWhatTheRunTrains:
     weights fit the card but whose gradients and optimizer state do not is refused outside
     the calibrated range as well. A LoRA run trains only its adapters, so the same model
     with LoRA starts with the warning. Where the estimate prices more trainable state than
-    the run holds (a subset of the parameters, no full gradient, a state paged to the host)
-    the floor leaves that term out rather than refuse a run that could fit.
+    the run holds (a subset of the parameters, no full gradient, a state paged to the host,
+    an optimizer that holds less than its figure, GaLore) the floor leaves that term out
+    rather than refuse a run that could fit.
     """
+
+    def test_the_optimizers_whose_state_is_counted_are_the_adamw_ones(self):
+        from soup_cli.utils.optimizer_zoo import SUPPORTED_OPTIMIZERS
+        from soup_cli.utils.vram_estimate import OPTIMIZER_BYTES_PER_PARAM
+
+        counted = hardware_fit._EXACT_STATE_OPTIMIZERS
+        assert counted == {
+            "adamw_torch", "adamw_torch_fused", "adamw_bnb_8bit", "schedule_free_adamw",
+        }
+        # Each is a name the config accepts and the estimate has its own figure for.
+        assert counted <= SUPPORTED_OPTIMIZERS
+        assert counted <= set(OPTIMIZER_BYTES_PER_PARAM)
+        assert counted <= hardware_fit._VALID_OPTIMIZERS
 
     @pytest.mark.parametrize(
         ("config", "params", "training", "card_bytes", "terms"), _TRAINED_STATE_DOES_NOT_FIT

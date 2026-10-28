@@ -321,6 +321,15 @@ def outside_calibrated_range(
 #: is ever held (the estimate still charges one).
 _FUSED_BACKWARD_OPTIMIZERS = frozenset({"lomo", "adalomo"})
 
+#: Optimizers whose state ``OPTIMIZER_BYTES_PER_PARAM`` prices at what they hold: AdamW's
+#: two fp32 moments (schedule-free AdamW's ``z`` and second moment), 8 bytes a parameter,
+#: and 8-bit AdamW's two 8-bit moments, 2. The other figures there are more than the
+#: optimizer holds (Adafactor and ``adalomo`` factor their state, ``lion_8bit`` keeps one
+#: moment), so the floor does not charge them.
+_EXACT_STATE_OPTIMIZERS = frozenset(
+    {"adamw_torch", "adamw_torch_fused", "adamw_bnb_8bit", "schedule_free_adamw"}
+)
+
 
 def _trains_a_subset(tcfg: Any) -> bool:
     """Whether a full fine-tune trains only some of the parameters (Spectrum, LISA, freezing)."""
@@ -341,20 +350,26 @@ def unextrapolated_floor(
     Only the estimate's terms that are a byte count per parameter times a parameter count,
     or a constant: the weights, the CUDA context (the fixed 0.5 GB, not the ``overhead``
     term, which adds 5% of every allocated byte, activations included) and, for the
-    parameters the run trains, their adapters, gradients and optimizer state. None of
-    them uses a fitted coefficient, so a run whose floor is more than the card holds
-    fails outside the calibrated range as surely as inside it. Activations, logits, the
-    4-bit dequantization copy and the allocator slack never enter it.
+    parameters the run trains, their LoRA adapters, their gradients and, for the optimizers
+    in ``_EXACT_STATE_OPTIMIZERS``, their optimizer state. None of them uses a fitted
+    coefficient, so a run whose floor is more than the card holds fails outside the
+    calibrated range as surely as inside it. Activations, logits, the 4-bit dequantization
+    copy and the allocator slack never enter it.
 
-    The trained-parameter terms are left out wherever the estimate overstates them,
-    so the floor never refuses a run that could fit:
+    The trained-parameter terms are left out wherever the estimate overstates them or has
+    no exact figure, so the floor never refuses a run that could fit:
 
-    - Spectrum (``unfrozen_parameters``), LISA, ``freeze_layers`` / ``freeze_ratio`` and
-      ``expand_layers`` train a subset of the parameters, but ``resolve_peft_mode`` prices
-      every parameter as trainable: weights and context only.
+    - On a full fine-tune, Spectrum (``unfrozen_parameters``), LISA, ``freeze_layers`` /
+      ``freeze_ratio`` and ``expand_layers`` train a subset of the parameters, but
+      ``resolve_peft_mode`` prices every parameter as trainable: weights and context only.
+      (With LoRA they change nothing here: the adapters' terms are counted as usual.)
     - ``lomo`` / ``adalomo`` keep no full gradient: no gradient term.
-    - An optimizer the estimate has no figure for (it prices it as AdamW), and a paged
-      optimizer, whose state moves to host memory under pressure: no optimizer term.
+    - The optimizer state is counted only for ``adamw_torch``, ``adamw_torch_fused``,
+      ``schedule_free_adamw`` and ``adamw_bnb_8bit``, and not when ``use_galore`` is on
+      (the trainer swaps in ``galore_adamw``, whose state is low-rank). Every other
+      optimizer has no optimizer term: Adafactor, ``lion_8bit`` and ``adalomo`` hold less
+      than the estimate's figure, a paged optimizer moves its state to host memory under
+      pressure, and one the estimate has no figure for is priced as AdamW.
     """
     floor = breakdown.weights_gb + OVERHEAD_FIXED_BYTES / GB
     terms = ["weights", "CUDA context"]
@@ -368,7 +383,7 @@ def unextrapolated_floor(
         (
             "optimizer state",
             breakdown.optimizer_gb,
-            optimizer in OPTIMIZER_BYTES_PER_PARAM and "paged" not in optimizer,
+            optimizer in _EXACT_STATE_OPTIMIZERS and not getattr(tcfg, "use_galore", False),
         ),
     ]
     for name, gigabytes, exact in charges:
@@ -376,6 +391,7 @@ def unextrapolated_floor(
             floor += gigabytes
             terms.append(name)
     return floor, tuple(terms)
+
 
 #: Tasks whose model has no vocabulary-sized output, so the estimate charges no
 #: logits: the classifier family and reward_model load
