@@ -15,7 +15,11 @@ replaced by the dict a Hub lookup would return.
 
 from __future__ import annotations
 
+import ast
+import importlib
+import inspect
 import io
+import typing
 
 import pytest
 import typer
@@ -25,7 +29,7 @@ from rich.console import Console
 from soup_cli.commands import train as train_mod
 from soup_cli.commands.train import _hardware_fit_preflight
 from soup_cli.config.loader import load_config_from_string
-from soup_cli.config.schema import TEMPLATES
+from soup_cli.config.schema import TEMPLATES, SoupConfig
 from soup_cli.utils import hardware_fit, model_shape
 from soup_cli.utils.vram_estimate import GB, OVERHEAD_FIXED_BYTES
 from tests.conftest import strip_ansi
@@ -138,10 +142,10 @@ def screen(monkeypatch):
     return lambda: _plain(buffer.getvalue())
 
 
-def _yaml(*, backend: str | None = None, **training) -> str:
+def _yaml(*, backend: str | None = None, task: str = "sft", **training) -> str:
     document = {
         "base": "someone/model",
-        "task": "sft",
+        "task": task,
         "data": {"train": "train.jsonl", "max_length": 2048},
         "training": {"quantization": "4bit", "batch_size": 4, **training},
     }
@@ -391,6 +395,13 @@ _TRAINED_STATE_DOES_NOT_FIT = [
         "weights, CUDA context and gradients",
         id="llama-7b-full-galore-on-50-gb",
     ),
+    # The DPO trainer does not apply GaLore (``task`` goes to ``_yaml``): it keeps AdamW,
+    # whose state is counted.
+    pytest.param(
+        _LLAMA_7B, _LLAMA_7B_PARAMS, {**_FULL, "task": "dpo", "use_galore": True}, 80e9,
+        "weights, CUDA context, gradients and optimizer state",
+        id="llama-7b-full-dpo-galore-on-80-gb",
+    ),
 ]
 
 #: Runs whose floor fits although the peak does not: the warning, and the run starts.
@@ -441,6 +452,12 @@ _FLOOR_FITS = [
         {**_FULL, "optimizer": "adamw_torch", "use_galore": True}, 60e9,
         id="llama-7b-full-galore-adamw-on-60-gb",
     ),
+    # Whatever optimizer is set: GaLore replaces it (54.4 GB; with 8-bit AdamW's state 67.9).
+    pytest.param(
+        _LLAMA_7B, _LLAMA_7B_PARAMS,
+        {**_FULL, "optimizer": "adamw_bnb_8bit", "use_galore": True}, 60e9,
+        id="llama-7b-full-galore-over-8bit-adamw-on-60-gb",
+    ),
     # These train a subset of the parameters but are priced as fully trainable.
     pytest.param(
         _LLAMA_7B, _LLAMA_7B_PARAMS, {"quantization": "none", "lisa_enabled": True}, 40e9,
@@ -467,6 +484,46 @@ _FLOOR_FITS = [
 ]
 
 
+def _dispatched_wrappers() -> dict:
+    """task -> wrapper class, read from the if-chain in ``trainer/dispatch.py`` (as in
+    ``test_issue1497_freeze_refused_outside_sft.py``), so a new task is scanned too."""
+    from soup_cli.trainer import dispatch
+
+    found = {}
+    for node in ast.walk(ast.parse(inspect.getsource(dispatch))):
+        if not isinstance(node, ast.If) or not isinstance(node.test, ast.Compare):
+            continue
+        test = node.test
+        if not (isinstance(test.left, ast.Name) and test.left.id == "task"):
+            continue
+        right = test.comparators[0]
+        if isinstance(test.ops[0], ast.Eq) and isinstance(right, ast.Constant):
+            tasks = [right.value]
+        elif isinstance(test.ops[0], ast.In) and isinstance(right, ast.Tuple):
+            tasks = [elt.value for elt in right.elts]
+        else:
+            continue
+        imports = [n for n in node.body if isinstance(n, ast.ImportFrom)]
+        assert len(imports) == 1, f"expected one import under task={tasks}"
+        module = importlib.import_module(imports[0].module)
+        for task in tasks:
+            found[task] = getattr(module, imports[0].names[0].name)
+    return found
+
+
+def _applies_galore(cls) -> bool:
+    """Whether the wrapper, or a soup class it inherits from, builds the GaLore optimizer."""
+    for klass in cls.__mro__:
+        if not klass.__module__.startswith("soup_cli."):
+            continue
+        for node in ast.walk(ast.parse(inspect.getsource(inspect.getmodule(klass)))):
+            if isinstance(node, ast.ClassDef) and node.name == klass.__name__:
+                for sub in ast.walk(node):
+                    if isinstance(sub, ast.Name) and sub.id == "get_galore_optimizer_and_params":
+                        return True
+    return False
+
+
 class TestTheFloorIncludesWhatTheRunTrains:
     """A full fine-tune holds gradients and optimizer state for every parameter it trains.
 
@@ -491,6 +548,15 @@ class TestTheFloorIncludesWhatTheRunTrains:
         assert counted <= SUPPORTED_OPTIMIZERS
         assert counted <= set(OPTIMIZER_BYTES_PER_PARAM)
         assert counted <= hardware_fit._VALID_OPTIMIZERS
+
+    def test_the_galore_tasks_are_the_ones_whose_trainer_builds_galore(self):
+        wrappers = _dispatched_wrappers()
+        assert set(wrappers) == set(typing.get_args(SoupConfig.model_fields["task"].annotation))
+        applying = {task for task, cls in wrappers.items() if _applies_galore(cls)}
+        assert applying == hardware_fit.GALORE_APPLYING_TASKS
+        # The scan itself: it sees SFT's call and tts reaching it through the SFT wrapper.
+        assert {"sft", "tts", "pretrain"} <= applying
+        assert "dpo" not in applying
 
     @pytest.mark.parametrize(
         ("config", "params", "training", "card_bytes", "terms"), _TRAINED_STATE_DOES_NOT_FIT

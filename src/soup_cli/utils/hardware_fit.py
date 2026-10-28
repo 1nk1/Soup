@@ -330,6 +330,13 @@ _EXACT_STATE_OPTIMIZERS = frozenset(
     {"adamw_torch", "adamw_torch_fused", "adamw_bnb_8bit", "schedule_free_adamw"}
 )
 
+#: Tasks whose trainer replaces ``training.optimizer`` with ``galore_adamw`` when
+#: ``use_galore`` is on: ``SFTTrainerWrapper.setup`` (``tts`` reaches it through
+#: ``super()``) and ``PretrainTrainerWrapper.setup``. Every other trainer ignores the
+#: field and keeps the configured optimizer. (``tts`` with ``tts_family: sesame_csm``
+#: builds its own trainer and refuses ``use_galore`` at setup.)
+GALORE_APPLYING_TASKS: frozenset[str] = frozenset({"sft", "tts", "pretrain"})
+
 
 def _trains_a_subset(tcfg: Any) -> bool:
     """Whether a full fine-tune trains only some of the parameters (Spectrum, LISA, freezing)."""
@@ -365,11 +372,15 @@ def unextrapolated_floor(
       (With LoRA they change nothing here: the adapters' terms are counted as usual.)
     - ``lomo`` / ``adalomo`` keep no full gradient: no gradient term.
     - The optimizer state is counted only for ``adamw_torch``, ``adamw_torch_fused``,
-      ``schedule_free_adamw`` and ``adamw_bnb_8bit``, and not when ``use_galore`` is on
-      (the trainer swaps in ``galore_adamw``, whose state is low-rank). Every other
-      optimizer has no optimizer term: Adafactor, ``lion_8bit`` and ``adalomo`` hold less
-      than the estimate's figure, a paged optimizer moves its state to host memory under
-      pressure, and one the estimate has no figure for is priced as AdamW.
+      ``schedule_free_adamw`` and ``adamw_bnb_8bit``. Every other optimizer has no
+      optimizer term: Adafactor, ``lion_8bit`` and ``adalomo`` hold less than the
+      estimate's figure, a paged optimizer moves its state to host memory under pressure,
+      and one the estimate has no figure for is priced as AdamW.
+    - With ``use_galore`` on a task in ``GALORE_APPLYING_TASKS`` there is no optimizer
+      term either: the trainer swaps in ``galore_adamw``, which keeps low-rank state for
+      the attention and MLP projections and full AdamW state for the other parameters
+      (embeddings, output head, norms), a mix the estimate has no figure for. On any
+      other task ``use_galore`` changes nothing and the configured optimizer is counted.
     """
     floor = breakdown.weights_gb + OVERHEAD_FIXED_BYTES / GB
     terms = ["weights", "CUDA context"]
@@ -377,13 +388,16 @@ def unextrapolated_floor(
     if inp.peft == "full" and _trains_a_subset(tcfg):
         return floor, tuple(terms)
     optimizer = str(getattr(tcfg, "optimizer", "adamw_torch") or "adamw_torch")
+    galore = bool(getattr(tcfg, "use_galore", False)) and (
+        getattr(cfg, "task", "sft") in GALORE_APPLYING_TASKS
+    )
     charges = [
         ("adapters", breakdown.adapters_gb, True),
         ("gradients", breakdown.gradients_gb, optimizer not in _FUSED_BACKWARD_OPTIMIZERS),
         (
             "optimizer state",
             breakdown.optimizer_gb,
-            optimizer in _EXACT_STATE_OPTIMIZERS and not getattr(tcfg, "use_galore", False),
+            optimizer in _EXACT_STATE_OPTIMIZERS and not galore,
         ),
     ]
     for name, gigabytes, exact in charges:
